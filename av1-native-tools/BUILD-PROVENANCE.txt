@@ -1,0 +1,387 @@
+================================================================================
+av1-native-tools/BUILD-PROVENANCE.txt
+what was actually built, when, by what, and with what result
+================================================================================
+
+WHY THIS FILE EXISTS
+--------------------------------------------------------------------------------
+A binary in a package is anonymous. This file is how anyone later can tell which
+native library came from which source, which toolchain and which build machine.
+Every time a binary is adopted into ../src/CodeBrix.VideoEncoding.Av1/runtimes/
+<rid>/native/, its section here is updated from that build's
+output/<rid>/BUILD-INFO.txt.
+
+Common to every entry below
+--------------------------------------------------------------------------------
+  Source          : aom/ (libaom 3.15.2) - the unmodified AOM release tarball
+                    (upstream-downloads/libaom-3.15.2.tar.gz; sha256
+                    67bb54b245f3...dfddc; see UPSTREAM.txt), plus
+                    shim/codebrix_av1.c implementing the fixed contract
+                    shim/codebrix_av1.h (API version 1, 17 functions)
+  Compiled        : libaom's ENCODER only, through libaom's OWN CMake
+                    (shim/CMakeLists.txt: add_subdirectory(aom EXCLUDE_FROM_ALL))
+                    with CONFIG_AV1_ENCODER=1 CONFIG_AV1_DECODER=0
+                    CONFIG_AV1_HIGHBITDEPTH=1 CONFIG_MULTITHREAD=1 CONFIG_PIC=1
+                    CONFIG_RUNTIME_CPU_DETECT=1 CONFIG_WEBM_IO=0 CONFIG_LIBYUV=0
+                    CONFIG_TUNE_VMAF=0 CONFIG_TUNE_BUTTERAUGLI=0 ENABLE_APPS=0
+                    ENABLE_TOOLS=0 ENABLE_EXAMPLES=0 ENABLE_TESTS=0
+                    ENABLE_TESTDATA=0 ENABLE_DOCS=0 BUILD_SHARED_LIBS=0
+                    ENABLE_NASM=1, GIT_EXECUTABLE = a non-existent path (version
+                    string from aom/CHANGELOG: "v3.15.2"). Static libaom is linked
+                    into ONE shared library per RID. third_party code compiled:
+                    fastfeat + vector (checked by every gate) and, on x86-64,
+                    x86inc.asm (%include'd by the assembly). NOT built: the
+                    decoder, apps, examples, tools, tests, docs, libyuv, libwebm,
+                    highway, googletest. libaom's own defaults otherwise apply:
+                    every SIMD flavour the toolchain supports, chosen at RUN time
+                    (x86 cpuid / Arm hwcaps / RISC-V hwcap). Each RID's libaom
+                    configuration is recorded below.
+  Assembler       : x86-64 only: nasm, never yasm. linux-x64: nasm 2.16.03 built
+                    from nasm/ inside the container on every build; android-x64:
+                    the same nasm built for the host into output/host-tools;
+                    win-x64 / osx-x64: the machine's own nasm. shim/CMakeLists.txt
+                    requires nasm for x86 targets and pins it as libaom's
+                    assembler (the NDK toolchain would otherwise substitute its
+                    own yasm - caught by the gate on 2026-10-10); every x64 gate
+                    checks the assembler CMake recorded.
+  Visibility      : -fvisibility=hidden for every object, libaom's included
+                    (libaom's x86inc.asm marks its functions hidden too) +
+                    --exclude-libs,ALL + the version script shim/codebrix_av1.map
+                    on Linux/Android, shim/codebrix_av1.exports on macOS,
+                    __declspec(dllexport) only on the 17 functions on Windows;
+                    exports are EXACTLY the 17 functions of codebrix_av1.h -
+                    checked by every gate (missing AND extra)
+  Patches applied : NONE. patches/ is empty.
+  Shipped names   : libcodebrix_av1.so / codebrix_av1.dll /
+                    libcodebrix_av1.dylib - unversioned (SONAME/install name
+                    unversioned too), because DllImport("codebrix_av1") probes
+                    exactly those names
+  Licence beside  : LICENSE-Aom.txt = licenses/LICENSE-Aom.txt (aom/LICENSE +
+  every binary      aom/PATENTS + the fastfeat (BSD-3), vector (MIT) and x86inc
+                    (ISC) licence texts), written and checked by
+                    licenses/compose-license-aom.sh; byte-identical on every RID
+  Unstripped twin : Linux / Android: -g with zlib-COMPRESSED DWARF (-gz; libaom's
+                    full debug info is ~90 MB uncompressed for linux-x64)
+  Smoke test      : shim/smoke-test.c, built for the TARGET by the same CMake run
+                    (codebrix_av1_smoke; it links no libaom) and run against the
+                    STAGED (stripped) file, loaded by path - see README.txt "THE
+                    SMOKE TEST" (~1870 bitstream-level checks).
+
+Known libaom behaviours (libaom 3.15.2, measured 2026-10-10)
+--------------------------------------------------------------------------------
+  1. SEQUENCE HEADER. aom_codec_get_global_headers() right after init returns a
+     sequence header whose coding-tool flags (use_128x128_superblock,
+     enable_interintra_compound, enable_dual_filter, enable_jnt_comp,
+     enable_restoration) and, at 12 bits, subsampling + chroma sample position
+     differ from the one libaom writes into the key frames (it finalises them
+     at the first frame). The shim therefore reports the OBU_SEQUENCE_HEADER of
+     the first key-frame packet (contract amended accordingly); the smoke test
+     checks it equals the one inside every key frame.
+  2. FORCED KEY FRAMES. In GOOD_QUALITY usage a frame encoded with
+     AOM_EFLAG_FORCE_KF at N is followed by a SECOND real key frame at N+1 -
+     with automatic key frames on or off (CBA_OPT_AUTOMATIC_KEY_FRAMES), with
+     the default look-ahead and with lag 0, at every cpu-used; forcing frame 0
+     gives 0 and 1. REALTIME gives exactly N; ALL_INTRA keys every frame. Cause
+     (lag > 0): av1/encoder/pass2_strategy.c, find_next_key_frame() ->
+     define_kf_interval(search_start_idx = 1) -> detect_app_forced_key() scans
+     the look-ahead from index 0, i.e. the forced frame itself, so the new
+     key-frame group gets length 0. Unchanged on libaom main (2026-10-10). A
+     15-line candidate fix (scan from search_start_idx) removed the N+1 key
+     frame for lag > 0 in a scratch build (smoke test still green) but not for
+     lag 0; it is NOT APPLIED (aom/ stays unmodified; patches/ is empty). Kept
+     here as the basis of a possible upstream report:
+       file     aom/av1/encoder/pass2_strategy.c
+       function define_kf_interval()
+       change   replace
+                    int num_frames_to_next_key = detect_app_forced_key(cpi);
+                with a scan of the look-ahead that starts at search_start_idx
+                instead of 0:
+                    int num_frames_to_next_key = -1;
+                    for (int k = search_start_idx; k <= cpi->ppi->lookahead->max_sz; k++) {
+                      const struct lookahead_entry *e =
+                          av1_lookahead_peek(cpi->ppi->lookahead, k, cpi->compressor_stage);
+                      if (e == NULL) break;
+                      if (e->flags == AOM_EFLAG_FORCE_KF) { num_frames_to_next_key = k; break; }
+                    }
+       effect   (lag > 0) forced key frame at N -> key frames 0, N only (was
+                0, N, N+1); the lag-0 path is a different one and still keys N+1.
+     (The same diff as a patch file: ClaudeHome/CANDIDATE_libaom-3.15.2_forced-
+     kf-double-keyframe_2026-10-10.patch.) Consequence for lock-step pairs: two
+     encoders given the same forced frames still produce IDENTICAL key-frame
+     positions (N and N+1 in both) - proven by the smoke test with automatic
+     key frames off and a scene cut in one stream only.
+  3. LOSSLESS AT 10 BITS WITH LOOK-AHEAD IS NOT BIT-EXACT. Reproduced with
+     libaom's own aomenc (built host-only from aom/, never shipped) on the
+     managed tests' fixtures, decoded identically by aomdec and dav1d: a few
+     wrong samples on some inter frames, content- and size-dependent (10-bit
+     I420 crops of one source at widths 136/162/164/166/168/200 x 92 bad,
+     others exact; 10-bit MONOCHROME 320x180 bad on two frames through the
+     shim). Independent of cpu-used, threads, arnr-*, overlay, keyframe
+     filtering, tpl (partial). Exact in every case tried with lag-in-frames 0
+     or with enable-order-hint 0; 8-bit was exact. => The shim encodes LOSSLESS
+     with lag 0, always.
+  4. ODD-SIZED 4:2:0. libaom does not code the last chroma column (odd width)
+     or row (odd height) of an I420 picture faithfully - every frame, key
+     frames included, lossless, lag 0 or not, through aom_img_wrap AND through
+     aom_img_alloc + copy, aomenc too; I444 and MONOCHROME odd sizes are exact.
+     => create() refuses odd width/height for CBA_LAYOUT_I420.
+  5. Matrix coefficients 0 (identity) with subsampled input: libaom refuses it
+     at the first encode; the shim refuses it at start (CBA_E_UNSUPPORTED)
+     unless the layout is I444.
+
+Linux (the three linux-* entries)
+--------------------------------------------------------------------------------
+  Route           : linux/build.sh <arch> -> container-build.sh inside
+                    codebrix-av1-build-<arch> (Containerfile.<arch>: the
+                    digest-pinned manylinux base + a toolchain PROBE; NOTHING is
+                    installed, so the image build also ran with --network none),
+                    run with --network none, --pull=never
+  Build host      : Dell Precision 7770, LMDE 7, x86_64, podman 5.4.2; arm64 and
+                    riscv64 under qemu-user emulation (13 and 20 minutes)
+  cmake options   : -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release
+                    -DCBA_BUILD_SMOKE_TEST=ON; CMAKE_C_FLAGS = CMAKE_CXX_FLAGS =
+                    "-g -gz -ffile-prefix-map=<src>=av1-native-tools
+                    -ffile-prefix-map=<build>=build", CMAKE_SHARED_LINKER_FLAGS=-gz;
+                    the shim's CMakeLists adds -fPIC -fvisibility=hidden and links
+                    with --no-undefined --exclude-libs,ALL --version-script
+                    -z noexecstack --build-id=sha1; then strip --strip-unneeded
+  Reproducibility : linux-x64 was built twice on 2026-10-11 (01:46 and 02:22 UTC,
+                    the second with ADOPT=0); the stripped AND unstripped files
+                    were byte-identical. (android-arm64 and android-x64 likewise,
+                    below.) linux-riscv64 was also built twice, but the coordinator
+                    amended comments in codebrix_av1.h between the two runs: the
+                    stripped files then differ ONLY in the 20-byte build-id, and
+                    the unstripped ones only in .debug_info (one DW_AT_decl_line:
+                    132 -> 135, the header's moved line) - consistent with
+                    reproducible builds.
+  Gate            : ELF class/machine, SONAME, no RPATH/RUNPATH/TEXTREL,
+                    GNU_STACK RW, exact export set (17, nothing else), third_party
+                    objects == fastfeat + vector, assembler == the vendored nasm
+                    (x64), NEEDED system-only + ldd -r, glibc floor CHECKED,
+                    build-id equal stripped/unstripped, licence file exact,
+                    smoke test (1871 checks)
+  Warnings        : 0 on every Linux RID (shim, smoke test AND libaom with its own
+                    -Wall -Wextra ... set)
+
+================================================================================
+linux-x64                                                         BUILT + PASSED
+================================================================================
+Built            : 2026-10-11 01:46:09 UTC (76 s)
+Built by         : linux/build.sh -> container-build.sh (native x86_64 host)
+Network          : DISABLED during this build (interfaces: lo)
+Derived image    : codebrix-av1-build-x86_64
+Base image       : quay.io/pypa/manylinux_2_28_x86_64@sha256:a61875a2f84cab7df8de222ff12cabc08ff86eb4ad402ac90ba7bdaed9600cca
+Container OS     : AlmaLinux 8.10 (Cerulean Leopard), ldd (GNU libc) 2.28
+Compiler         : cc (GCC) 14.2.1 20250110 (Red Hat 14.2.1-11)
+Linker           : GNU ld version 2.41-4.el8_10.1
+cmake / perl     : cmake version 4.4.0 / perl 5.26.3 (the base image's own)
+Assembler        : nasm 2.16.03, built from nasm/ inside the container (build tool)
+libaom config    : AOM_ARCH_X86_64 HAVE_MMX SSE SSE2 SSE3 SSSE3 SSE4_1 SSE4_2 AVX AVX2
+                   AVX512 (runtime-dispatched via cpuid), CONFIG_RUNTIME_CPU_DETECT=1
+                   CONFIG_MULTITHREAD=1 (pthreads) CONFIG_AV1_HIGHBITDEPTH=1
+File             : libcodebrix_av1.so (SONAME libcodebrix_av1.so)
+Build-id         : 02486087fca9d52c267c2904afa55f47fe5ee187
+Size (stripped)  : 8283120 bytes
+Size (unstripped): 29773104 bytes -> unstripped/linux-x64/libcodebrix_av1.so
+SHA256           : c9561d74ea280dbab6a46aa8585353831bb9e191abb799f494c03e1cf838983e
+SHA256 unstripped: 0e4b31fbdbeda723bd339e9d3e6e8150fe5a33141fc4e443ea3fc61a47d0156f
+glibc floor      : 2.27 (allowed <= 2.28)
+Dynamic deps     : libc.so.6 libm.so.6 libpthread.so.0
+Smoke test       : PASSED (in the container; 1871 checks)
+
+================================================================================
+linux-arm64                                                       BUILT + PASSED
+================================================================================
+Built            : 2026-10-11 01:47:24 UTC (803 s)
+Built by         : linux/build.sh -> container-build.sh (qemu-aarch64 emulation)
+Network          : DISABLED during this build (interfaces: lo)
+Derived image    : codebrix-av1-build-aarch64
+Base image       : quay.io/pypa/manylinux_2_28_aarch64@sha256:162c81dfd3efc710732a571717d3c916a6945ebf279e879ddee3243af96fe46f
+Container OS     : AlmaLinux 8.10 (Cerulean Leopard), ldd (GNU libc) 2.28
+Compiler         : cc (GCC) 14.2.1 20250110 (Red Hat 14.2.1-11)
+Linker           : GNU ld version 2.41-4.el8_10.1
+cmake / perl     : cmake version 4.4.0 / perl 5.26.3
+Assembler        : none (NEON / SVE are C intrinsics)
+libaom config    : AOM_ARCH_AARCH64 HAVE_NEON NEON_DOTPROD NEON_I8MM ARM_CRC32 SVE SVE2
+                   (runtime-dispatched via the Linux hwcaps)
+File             : libcodebrix_av1.so (SONAME libcodebrix_av1.so)
+Build-id         : 7911403b856d7bd8d5fc4f7f88e47475af2338ef
+Size (stripped)  : 6501152 bytes
+Size (unstripped): 29454752 bytes -> unstripped/linux-arm64/libcodebrix_av1.so
+SHA256           : e0393473790372379dca48edbcfadc07ab16ebd0d97472d6746694b8dafab2b6
+SHA256 unstripped: dcdf5e161098c7f83bf05291fce85513c1c007e4b97deab6185b90962bfa13d8
+glibc floor      : 2.27 (allowed <= 2.28)
+Dynamic deps     : libc.so.6 libm.so.6 libpthread.so.0
+Smoke test       : PASSED (in the container, emulated; 1871 checks)
+
+================================================================================
+linux-riscv64                                                     BUILT + PASSED
+================================================================================
+Built            : 2026-10-11 02:00:47 UTC (1213 s)
+Built by         : linux/build.sh -> container-build.sh (qemu-riscv64 emulation)
+Network          : DISABLED during this build (interfaces: lo)
+Derived image    : codebrix-av1-build-riscv64
+Base image       : quay.io/pypa/manylinux_2_39_riscv64@sha256:04b3acc69a6cebb10ac1252587d202acce6445d91c783d3f92229bb2b2483069
+Container OS     : Rocky Linux 10.2 (Red Quartz), ldd (GNU libc) 2.39
+Compiler         : cc (GCC) 14.3.1 20251022 (Red Hat 14.3.1-4)
+Linker           : GNU ld version 2.41-63.el10
+cmake / perl     : cmake version 4.4.0 / perl 5.40.2
+Assembler        : none
+libaom config    : HAVE_RVV=1 - the RVV files are compiled with -march=rv64gcv and
+                   chosen at RUN time from AT_HWCAP ('v'), so the library also runs
+                   on RISC-V boards without the vector extension (portable C there)
+File             : libcodebrix_av1.so (SONAME libcodebrix_av1.so)
+Build-id         : 7a7b217c37cb876aa9b09f6e0e1181b3a5557a8e
+Size (stripped)  : 3746472 bytes
+Size (unstripped): 13638896 bytes -> unstripped/linux-riscv64/libcodebrix_av1.so
+SHA256           : 152858f1171c30e01f446e4a5bc8ef36b51ba2bd5c1fd40f520c2407050f6669
+SHA256 unstripped: 9a4e8b08adc39884efb5066f933a35d34612695bd88aeceecd88f3a42b3b1989
+glibc floor      : 2.34 (allowed <= 2.39)
+Dynamic deps     : libc.so.6 libm.so.6
+Smoke test       : PASSED (in the container, emulated; 1871 checks)
+
+Android (the two android-* entries)
+--------------------------------------------------------------------------------
+  Route           : android/build.sh on the Linux laptop (host cmake 3.31.6 +
+                    GNU Make 4.4.1 + perl; NDK 30.0.16248370
+                    android.toolchain.cmake, ANDROID_PLATFORM=android-33,
+                    -DCBA_BUILD_SMOKE_TEST=ON); x86_64: nasm 2.16.03 built from
+                    nasm/ for the host into output/host-tools/bin
+  Flags           : CMAKE_C_FLAGS = CMAKE_CXX_FLAGS = "-g -gz -ffile-prefix-map=...
+                    -fdebug-compilation-dir=build" on top of the NDK's Release
+                    flags; linker -Wl,-z,max-page-size=16384
+                    -Wl,-z,common-page-size=16384 -Wl,--build-id=sha1 -gz (+ the
+                    shim's --no-undefined --exclude-libs,ALL --version-script
+                    -z noexecstack); the smoke-test executable also links with
+                    16 KB pages; llvm-strip --strip-unneeded
+  NDK + yasm      : the NDK's toolchain file sets CMAKE_ASM_NASM_COMPILER to the
+                    NDK's own yasm; shim/CMakeLists.txt now pins the nasm on PATH
+                    instead, and the gate fails unless libaom's recorded
+                    assembler is the vendored nasm (caught in the first dry run)
+  Gate            : android/layout-check.c (ABI static asserts, cross-compiled
+                    for the ABI), ELF64/machine, every PT_LOAD 16 KB aligned, no
+                    W+X segment, Android API note == 33, NEEDED libc/libm/libdl
+                    only, no TEXTREL/RPATH/RUNPATH, SONAME, exact exports (on the
+                    stripped AND unstripped file), third_party == fastfeat +
+                    vector, nasm (x64), build-id equal, licence exact, and the
+                    smoke test run on a real device over adb
+                    (/data/local/tmp/codebrix-av1-smoke, removed after)
+  Reproducibility : both ABIs built twice on 2026-10-11 (the second with
+                    ADOPT=0); stripped and unstripped files byte-identical.
+  Warnings        : 0 for both ABIs (shim, smoke test and libaom)
+
+================================================================================
+android-arm64                                                     BUILT + PASSED
+================================================================================
+Built            : 2026-10-11 01:47:05 UTC
+ABI / API        : arm64-v8a / 33
+Compiler         : Android (16134705, +pgo, +bolt, +lto, +mlgo, based on r574158c) clang version 21.0.0
+libaom config    : AOM_ARCH_AARCH64 HAVE_NEON NEON_DOTPROD NEON_I8MM ARM_CRC32 SVE SVE2
+                   (runtime-dispatched)
+File             : libcodebrix_av1.so (SONAME libcodebrix_av1.so)
+Build-id         : 54f5125b9df742e568a3bee299250e8408b205bd
+Size (stripped)  : 5104136 bytes
+Size (unstripped): 17192504 bytes -> unstripped/android-arm64/libcodebrix_av1.so
+SHA256           : d1e0aa3afc4e66c2413fe830967d13c14ad1022b078f6c6c4d1d7e9e20a46112
+SHA256 unstripped: 2d7fc94e53462965af30f1ef5a6731220009f12a0a2b69b352cb4a76f95a04d2
+PT_LOAD align    : 0x4000 x4 (16 KB page-size ready)
+NEEDED           : libc.so libdl.so libm.so
+Device smoke test: PASSED on 98271FFBA0048D (Pixel 4 XL, arm64-v8a), 2026-10-11 01:47 UTC (1871 checks)
+
+================================================================================
+android-x64                                                       BUILT + PASSED
+================================================================================
+Built            : 2026-10-11 01:47:39 UTC
+ABI / API        : x86_64 / 33
+Compiler         : Android (16134705, +pgo, +bolt, +lto, +mlgo, based on r574158c) clang version 21.0.0
+Assembler        : nasm 2.16.03 (vendored, built for the host)
+libaom config    : AOM_ARCH_X86_64 HAVE_MMX SSE SSE2 SSE3 SSSE3 SSE4_1 SSE4_2 AVX AVX2
+                   AVX512 (runtime-dispatched)
+File             : libcodebrix_av1.so (SONAME libcodebrix_av1.so)
+Build-id         : 926cf965906cc35233f3a820382b0d2111898da8
+Size (stripped)  : 8437424 bytes
+Size (unstripped): 17645256 bytes -> unstripped/android-x64/libcodebrix_av1.so
+SHA256           : ab100dad195c89c4ec4560e00505de0b804caf28892feab467eeaf74497ca8fa
+SHA256 unstripped: 3e49c8d609fb46f97916395c54d47b59ead2fdee60d476c34b9c32b3f68d6b1b
+PT_LOAD align    : 0x4000 x4 (16 KB page-size ready)
+NEEDED           : libc.so libdl.so libm.so
+Device smoke test: PASSED on 192.168.86.225:5555 (HP laptop, model 87FE, x86_64), 2026-10-11 01:47 UTC (1871 checks)
+
+Windows (the two win-* entries)
+--------------------------------------------------------------------------------
+  Route           : windows/build-win-x64.ps1 / build-win-arm64.ps1 (dot-source
+                    build-common.ps1): MSVC through CMake's Visual Studio
+                    generator, -A x64 / -A ARM64, -DAOM_TARGET_CPU=x86_64 / arm64,
+                    -DCBA_BUILD_SMOKE_TEST=ON, CMAKE_MSVC_RUNTIME_LIBRARY=
+                    MultiThreaded (static CRT, every target), /O2 /Ob2 /DNDEBUG /Z7
+                    (C and C++), link /INCREMENTAL:NO /DEBUG /OPT:REF /OPT:ICF
+                    /PDBALTPATH:codebrix_av1.pdb. Perl on PATH (both RIDs) and
+                    nasm on PATH (win-x64) are required and named when missing.
+                    win-arm64 route Auto: native on an ARM64 host, cross
+                    (x64_arm64) on an x64 host (-AdoptCrossBuild to adopt with the
+                    smoke test unrun). If MSVC fails on win-arm64, the fallback is
+                    clang-cl (-T ClangCL; see build-win-arm64.ps1).
+  Scripts         : copies of CodeBrix.Audio.FlacWriter's Windows scripts (which ran
+                    unchanged on Jeremy's x64 Windows 11 machine on 2026-10-10),
+                    adapted to libaom. NOT YET RUN for libaom.
+  Gate            : PE machine (header + dumpbin), exact exports, dependents
+                    KERNEL32.dll only (no VC runtime), third_party == fastfeat +
+                    vector (from the generated .vcxproj files), nasm (x64), licence
+                    (committed file == a byte-exact PowerShell re-composition from
+                    aom\), LoadLibrary smoke test by full path.
+
+================================================================================
+win-x64                                       NOT YET BUILT - Jeremy builds on Windows
+================================================================================
+  cd av1-native-tools\windows ; .\build-win-x64.ps1
+  then replace this block from output\win-x64\BUILD-INFO.txt.
+
+================================================================================
+win-arm64                                     NOT YET BUILT - Jeremy builds on Windows
+================================================================================
+  cd av1-native-tools\windows ; .\build-win-arm64.ps1 -AdoptCrossBuild   (x64 host)
+  then replace this block from output\win-arm64\BUILD-INFO.txt; finish the gate on
+  an ARM64 Windows device (Surface Pro X) as build-win-arm64.ps1's header says.
+
+macOS (the two osx-* entries)
+--------------------------------------------------------------------------------
+  Route           : macos/build-osx-arm64.sh / build-osx-x64.sh (source
+                    build-common.sh): Apple clang via CMake "Unix Makefiles",
+                    -DCBA_BUILD_SMOKE_TEST=ON, -DAOM_TARGET_CPU=<arm64|x86_64>,
+                    CMAKE_OSX_ARCHITECTURES=<arm64|x86_64>, deployment target 11.0
+                    (arm64) / 10.14 (x64) - the CodeBrix.Sdl3 / Vorbis / FlacWriter
+                    floors; -g, dsymutil, strip -x, then ad-hoc codesign; thin
+                    dylibs, never universal; exports via shim/codebrix_av1.exports.
+                    Perl required (macOS's /usr/bin/perl); osx-x64 requires nasm
+                    (brew install nasm - the dav1d way).
+  Scripts         : copies of CodeBrix.Audio.FlacWriter's macOS scripts (copies of
+                    Vorbis's, which ran unchanged on Jeremy's Apple Silicon Mac on
+                    2026-10-10), adapted to libaom. NOT YET RUN.
+  Expected        : as for Vorbis/FlacWriter, ld derives LC_UUID from output that
+                    includes the N_OSO stabs' .o timestamps, so two builds of the
+                    same source ship the same code under different LC_UUIDs.
+  Gate            : thin Mach-O of the right arch (file + lipo), exact exports
+                    (nm -gU), install name @rpath/libcodebrix_av1.dylib,
+                    system-only dependencies, no LC_RPATH, deployment target
+                    CHECKED + 0 -Wunguarded-availability, valid ad-hoc signature,
+                    licence exact, third_party == fastfeat + vector, nasm (x64),
+                    LC_UUID equal stripped/unstripped, smoke test.
+
+================================================================================
+osx-arm64                                     NOT YET BUILT - Jeremy builds on macOS
+================================================================================
+  cd av1-native-tools/macos && ./build-osx-arm64.sh
+  then replace this block from output/osx-arm64/BUILD-INFO.txt.
+
+================================================================================
+osx-x64                                       NOT YET BUILT - Jeremy builds on macOS
+================================================================================
+  cd av1-native-tools/macos && ./build-osx-x64.sh     (Rosetta 2 to verify on Apple Silicon)
+  then replace this block from output/osx-x64/BUILD-INFO.txt.
+
+Host build (NOT shipped)
+--------------------------------------------------------------------------------
+  output/host/libcodebrix_av1.so - build-host.sh with the laptop's own cmake
+  3.31.6 + gcc 14.2.0 (Debian) + the vendored nasm built for the host, for running
+  the managed tests on a dev box. Never copied into src/; its glibc floor is the
+  dev box's.

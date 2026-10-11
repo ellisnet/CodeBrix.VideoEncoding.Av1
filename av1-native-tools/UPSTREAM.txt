@@ -1,0 +1,160 @@
+================================================================================
+av1-native-tools/aom and av1-native-tools/nasm - VENDORED UPSTREAM SOURCE
+================================================================================
+
+WHAT THESE FOLDERS ARE
+--------------------------------------------------------------------------------
+Unmodified copies of two official upstream release tarballs:
+
+  aom/    libaom 3.15.2 - the Alliance for Open Media's AV1 reference codec. The
+          ONLY upstream source the shipped codebrix_av1 native library is built
+          from (encoder side only).
+  nasm/   nasm 2.16.03 - the Netwide Assembler. A BUILD-TIME TOOL ONLY: it
+          assembles libaom's x86-64 SIMD on the Linux x64 and Android x64
+          builds. It is never shipped, never linked, and its licence is not
+          part of LICENSE-Aom.txt.
+
+No build step in this repository clones, downloads, or otherwise fetches either
+(or anything else) at build time - see README.txt for the rule this exists to
+satisfy. The release tarballs themselves are kept, byte for byte as downloaded,
+in upstream-downloads/, so the vendored trees can be re-verified at any time
+with no network.
+
+This file lives BESIDE the trees, not inside them, so that aom/ and nasm/ stay
+byte-identical to their tarballs (not even an added file).
+
+UPSTREAM IDENTITY - libaom
+--------------------------------------------------------------------------------
+Project        : libaom - AV1 Codec Library (Alliance for Open Media)
+Upstream URL   : https://storage.googleapis.com/aom-releases/
+Project home   : https://aomedia.googlesource.com/aom/
+Version        : 3.15.2              (CMakeLists.txt: project(AOM ... VERSION 3.15.2);
+                                      CHANGELOG: "2026-10-06 v3.15.2")
+Tag            : v3.15.2 -> commit af3dc9aadc793c1b00edc003e3fc19a44fdeb574
+                 (tree 3e0fa46717a3a60d9f451aed66f49d4897b80fb7)
+Tarball        : upstream-downloads/libaom-3.15.2.tar.gz   (6629974 bytes)
+SHA-256        : 67bb54b245f33ed98600e08269e6139986e48114e14042474ddd8885801dfddc
+Signature      : upstream-downloads/libaom-3.15.2.tar.gz.asc (the bucket's detached
+                 PGP signature, kept as downloaded; not verified here - no key
+                 was fetched)
+Vendored as    : aom/   (the tarball's libaom-3.15.2/ folder, renamed)
+
+Checked on 2026-10-10, two independent ways:
+  * The aom-releases bucket publishes NO .sha256sum for 3.15.2 (only the .asc);
+    its object metadata md5Hash (6xuifqNUmE9I9uCZGLNcwg==) equals the md5 of the
+    downloaded tarball.
+  * The googlesource archive of tag v3.15.2
+      https://aomedia.googlesource.com/aom/+archive/v3.15.2.tar.gz
+    (sha256 a7a0e9da9e8795f694c002aef9cf4ad17543f384cfa71dfde9d085fca162b569 -
+    gitiles archives are generated on demand, so their bytes may change; the
+    TREE is what was compared) unpacks to a tree IDENTICAL to the release
+    tarball's: `diff -r` empty, 1520 files each.
+
+LICENSING OF libaom - WHAT IS AND IS NOT BUILT
+--------------------------------------------------------------------------------
+libaom is BSD-2-Clause (aom/LICENSE, "Copyright (c) 2016, Alliance for Open
+Media") plus the Alliance for Open Media Patent License 1.0 (aom/PATENTS).
+
+Compiled into codebrix_av1 (shim/CMakeLists.txt drives libaom's own CMake):
+the encoder side of aom/ (aom/, aom_dsp/, aom_mem/, aom_ports/, aom_scale/,
+aom_util/, av1/ - common + encoder, and common/args_helper.c), plus exactly
+two third_party components:
+  third_party/fastfeat   BSD-3-Clause (Edward Rosten) - FAST corner detector
+                         (the encoder's global-motion search)
+  third_party/vector     MIT (Peter Goldsborough)
+and, on the x86-64 RIDs only, the assembly framework
+  third_party/x86inc     ISC (x264 project) - %include'd by libaom's .asm files
+Their licence texts are composed into LICENSE-Aom.txt
+(licenses/compose-license-aom.sh; its --check re-runs a survey of every
+copyright line in the compilable sources on every bash build, and every gate
+checks that the only third_party objects in a build are fastfeat's and
+vector's).
+
+Vendored but NEVER compiled and NEVER shipped (they are part of the tarball):
+  the AV1 DECODER (CONFIG_AV1_DECODER=0), apps/ (aomenc, aomdec), examples/,
+  tools/, stats/, test/ (unit tests + test vectors' scripts), doc/,
+  third_party/googletest, third_party/libwebm (CONFIG_WEBM_IO=0),
+  third_party/libyuv (CONFIG_LIBYUV=0 - the shim never scales or converts),
+  third_party/highway (CONFIG_HIGHWAY=0, libaom's default).
+
+Used here      : libaom's own CMake (shim/CMakeLists.txt add_subdirectory,
+                 EXCLUDE_FROM_ALL). Perl runs libaom's rtcd.pl / version.pl at
+                 configure time; every generated file (config/aom_config.h,
+                 aom_version.h, the *_rtcd.h headers) goes into the BUILD tree,
+                 never into aom/. The version string comes from aom/CHANGELOG
+                 (GIT_EXECUTABLE is deliberately a non-existent path), so
+                 aom_codec_version_str() returns "v3.15.2" on every machine.
+
+UPSTREAM IDENTITY - nasm (build tool only)
+--------------------------------------------------------------------------------
+Project        : NASM - the Netwide Assembler
+Upstream URL   : https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/
+Project home   : https://www.nasm.us/   (source: https://github.com/netwide-assembler/nasm)
+Version        : 2.16.03             (nasm/version: 2.16.03) - the latest stable
+                                      2.16.x on 2026-10-10 (3.0x releases exist;
+                                      2.16.x was chosen as the long-proven line)
+Git id         : b9b8718a0878523d5c45f0ab583261a3ab835ae6 (nasm.us git.id) ==
+                 the object of GitHub tag nasm-2.16.03
+Tarball        : upstream-downloads/nasm-2.16.03.tar.xz   (1032388 bytes)
+SHA-256        : 1412a1c760bbd05db026b6c0d1657affd6631cd0a63cddb6f73cc6d4aa616148
+Vendored as    : nasm/  (the tarball's nasm-2.16.03/ folder, renamed)
+Licence        : BSD-2-Clause (nasm/LICENSE, "Copyright 1996-2010 the NASM
+                 Authors") - applies to the tool only; NOTHING of nasm is in the
+                 shipped binaries (it is listed in THIRD-PARTY-NOTICES.txt as a
+                 build tool).
+
+Checked on 2026-10-10:
+  * nasm.us publishes NO checksum file for 2.16.03. The tarball's sha256 equals
+    the one in Debian's nasm_2.16.03-1.dsc (its orig.tar.xz is the upstream
+    tarball byte for byte) - an independent second source.
+  * nasm.us's git.id for 2.16.03 is the same object as GitHub's tag
+    nasm-2.16.03, and the GitHub tag archive matches the tarball in every
+    hand-written file; the only differences are the files the release process
+    generates (configure, config.h.in, the x86/insns*.c / asm/*.c tables,
+    version.h, man pages, ...) and three regenerated Makefiles.
+
+How it is used : build-nasm.sh copies nasm/ to a scratch folder and runs its
+                 own ./configure + make there (the vendored tree is never
+                 written): inside the manylinux x86_64 container for linux-x64
+                 (the image has only yasm 1.3.0, which libaom treats as the
+                 lesser assembler and which is never used), and on the build
+                 host into output/host-tools/bin for android-x64 and the host
+                 build. arm64 / riscv64 assemble nothing (NEON is C intrinsics,
+                 RISC-V is C + RVV intrinsics). Windows and macOS use the
+                 machine's own nasm (as the dav1d builds do).
+
+NOT MODIFIED
+--------------------------------------------------------------------------------
+No file in aom/ or nasm/ has been modified, renamed, reformatted, added or
+deleted, and none ever should be. Verified on 2026-10-10 with the check below
+(no differences; 1520 files in aom/, 1190 in nasm/).
+
+If a future build ever needs a change to either source, it goes in
+patches/*.patch and is applied by the build scripts into a scratch copy at build
+time, never into these folders. As of 2026-10-10 there are no patches.
+
+COMMITTING aom/ (once): aom/.gitignore lists ".gitignore" itself, and a nested
+.gitignore wins over ours, so git skips that one file. Add it explicitly once:
+    git add -f av1-native-tools/aom/.gitignore
+(once tracked, it stays tracked). Nothing else in either tree is ignored -
+av1-native-tools/.gitignore re-includes everything the repository-root
+.gitignore would otherwise hide. Check with:
+    git ls-files --others --ignored --exclude-standard av1-native-tools/aom av1-native-tools/nasm
+
+VERIFYING THE SNAPSHOTS AGAINST THEIR TARBALLS (no network needed)
+--------------------------------------------------------------------------------
+    cd av1-native-tools
+    sha256sum upstream-downloads/libaom-3.15.2.tar.gz upstream-downloads/nasm-2.16.03.tar.xz
+    mkdir /tmp/aom-verify /tmp/nasm-verify
+    tar -xzf upstream-downloads/libaom-3.15.2.tar.gz -C /tmp/aom-verify
+    tar -xJf upstream-downloads/nasm-2.16.03.tar.xz  -C /tmp/nasm-verify
+    diff -r /tmp/aom-verify/libaom-3.15.2 aom        # expect no output
+    diff -r /tmp/nasm-verify/nasm-2.16.03 nasm       # expect no output
+
+Re-checking the tarballs against upstream (optional, needs network - a
+convenience for a human, never a build step):
+
+    https://storage.googleapis.com/aom-releases/libaom-3.15.2.tar.gz
+    https://aomedia.googlesource.com/aom/+/refs/tags/v3.15.2
+    https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/nasm-2.16.03.tar.xz
+    https://github.com/netwide-assembler/nasm/releases/tag/nasm-2.16.03

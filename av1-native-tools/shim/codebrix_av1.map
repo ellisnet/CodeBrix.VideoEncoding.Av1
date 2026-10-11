@@ -1,0 +1,25 @@
+/* codebrix_av1.map - ELF version script (Linux, Android): export EXACTLY the functions of codebrix_av1.h.
+ * Belt and braces on top of -fvisibility=hidden and --exclude-libs,ALL. No version node name, so
+ * the symbols stay unversioned (DllImport resolves plain names). Keep in sync with codebrix_av1.h. */
+{
+  global:
+    codebrix_av1_api_version;
+    codebrix_av1_library_version;
+    codebrix_av1_encoder_create;
+    codebrix_av1_encoder_set_int32;
+    codebrix_av1_encoder_set_string_option;
+    codebrix_av1_encoder_start;
+    codebrix_av1_encoder_encode;
+    codebrix_av1_encoder_flush;
+    codebrix_av1_encoder_pending_packets;
+    codebrix_av1_encoder_packet_info;
+    codebrix_av1_encoder_read_packet;
+    codebrix_av1_encoder_sequence_header_length;
+    codebrix_av1_encoder_read_sequence_header;
+    codebrix_av1_encoder_frames_submitted;
+    codebrix_av1_encoder_packets_produced;
+    codebrix_av1_encoder_last_error;
+    codebrix_av1_encoder_destroy;
+  local:
+    *;
+};

@@ -1,0 +1,19 @@
+# codebrix_av1.exports - macOS ld -exported_symbols_list: EXACTLY the functions of codebrix_av1.h
+# (Mach-O C symbols carry a leading underscore). Keep in sync with codebrix_av1.h.
+_codebrix_av1_api_version
+_codebrix_av1_library_version
+_codebrix_av1_encoder_create
+_codebrix_av1_encoder_set_int32
+_codebrix_av1_encoder_set_string_option
+_codebrix_av1_encoder_start
+_codebrix_av1_encoder_encode
+_codebrix_av1_encoder_flush
+_codebrix_av1_encoder_pending_packets
+_codebrix_av1_encoder_packet_info
+_codebrix_av1_encoder_read_packet
+_codebrix_av1_encoder_sequence_header_length
+_codebrix_av1_encoder_read_sequence_header
+_codebrix_av1_encoder_frames_submitted
+_codebrix_av1_encoder_packets_produced
+_codebrix_av1_encoder_last_error
+_codebrix_av1_encoder_destroy

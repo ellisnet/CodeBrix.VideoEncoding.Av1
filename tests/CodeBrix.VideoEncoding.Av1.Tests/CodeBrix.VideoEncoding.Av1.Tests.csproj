@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\CodeBrix.VideoEncoding.Av1\CodeBrix.VideoEncoding.Av1.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.v3" Version="4.0.2" />
+    <PackageReference Include="SilverAssertions.ApacheLicenseForever" Version="1.0.248.1071" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The same Core pin as the library csproj; raise both together. -->
+    <PackageReference Include="CodeBrix.VideoProcessing.Core.MitLicenseForever" Version="1.0.284.20" />
+    <!-- The independent AV1 DECODER the round-trip tests decode every packet with (test project only). -->
+    <PackageReference Include="CodeBrix.VideoPlayback.Dav1d.BsdLicenseForever" Version="1.0.271.1206" />
+  </ItemGroup>
+
+  <!--
+    The library's committed native libraries, copied to the test output under runtimes/<rid>/native/ - the
+    layout the library's DllImportResolver probes - so the tests exercise exactly what the package ships.
+    Remove-then-Include so the explicit metadata does not collide with the SDK's default None glob. A glob, so
+    a platform with no native committed yet never breaks the build.
+  -->
+  <ItemGroup>
+    <None Remove="..\..\src\CodeBrix.VideoEncoding.Av1\runtimes\**\*" />
+    <None Include="..\..\src\CodeBrix.VideoEncoding.Av1\runtimes\**\*" Link="runtimes\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!--
+    Bootstrap only: before a linux-x64 native is committed under runtimes/, use the local host build of
+    av1-native-tools (output/host/, never committed) so the native tests can run on a Linux x64 dev machine.
+    Inert as soon as runtimes/linux-x64/native/libcodebrix_av1.so exists - the committed binary always wins.
+  -->
+  <ItemGroup Condition="!Exists('..\..\src\CodeBrix.VideoEncoding.Av1\runtimes\linux-x64\native\libcodebrix_av1.so') And Exists('..\..\av1-native-tools\output\host\libcodebrix_av1.so')">
+    <None Include="..\..\av1-native-tools\output\host\libcodebrix_av1.so" Link="runtimes\linux-x64\native\libcodebrix_av1.so" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
