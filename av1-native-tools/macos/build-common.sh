@@ -5,8 +5,8 @@
 #
 # Sourced by build-osx-arm64.sh and build-osx-x64.sh; not meant to be run directly.
 #
-#   Written on Linux on 2026-10-10 as a copy of CodeBrix.VideoEncoding.Av1's
-#   av1-native-tools/macos/build-common.sh (itself a copy of CodeBrix.Audio.Vorbis's, which Jeremy
+#   Written on Linux on 2026-10-10 as a copy of CodeBrix.Audio.FlacWriter's
+#   flac-native-tools/macos/build-common.sh (itself a copy of CodeBrix.Audio.Vorbis's, which Jeremy
 #   ran UNCHANGED and successfully on his Apple Silicon Mac the same day - macOS 27.0.1, Xcode 27.0
 #   / Apple clang 21.0.0, cmake 4.4.3, GNU Make 3.81, /bin/bash 3.2; osx-x64 under Rosetta 2),
 #   adapted only where libaom differs: one vendored tree (aom/, built ENCODER-ONLY through
@@ -19,8 +19,10 @@
 #   size measured after signing, the deployment-target stamp CHECKED rather than reported, LC_UUID
 #   equal in the stripped and unstripped files - is unchanged.
 #
-#   NOT YET RUN (2026-10-10). If something breaks on the Mac, fix it IN THE SCRIPT and record it
-#   in ../BUILD-PROVENANCE.txt.
+#   FIRST RUN for libaom 2026-10-11 UTC (2026-10-10 evening, local) on the same Mac (/usr/bin/perl
+#   5.34, Homebrew NASM 3.02, Rosetta 2): both architecture scripts ran UNCHANGED, passed the
+#   complete gate (1871-check smoke test included) and adopted - see ../BUILD-PROVENANCE.txt. If
+#   something breaks on another machine, fix it IN THE SCRIPT and record it there.
 #
 # Everything it needs is in this repository: ../aom (the unmodified libaom 3.15.2 release tree),
 # ../shim (the codebrix_av1 shim, its CMakeLists.txt and smoke-test.c), ../patches (empty), and

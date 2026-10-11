@@ -492,10 +492,39 @@ macOS (the two osx-* entries)
                     (brew install nasm - the dav1d way).
   Scripts         : copies of CodeBrix.Audio.FlacWriter's macOS scripts (copies of
                     Vorbis's, which ran unchanged on Jeremy's Apple Silicon Mac on
-                    2026-10-10), adapted to libaom. NOT YET RUN.
-  Expected        : as for Vorbis/FlacWriter, ld derives LC_UUID from output that
-                    includes the N_OSO stabs' .o timestamps, so two builds of the
-                    same source ship the same code under different LC_UUIDs.
+                    2026-10-10), adapted to libaom.
+  Build host      : Jeremy's Apple Silicon Mac - macOS 27.0.1 (26A434, arm64),
+                    Xcode 27.0 (27A266a) at /Volumes/VideoWork/Applications/
+                    Xcode.app, Apple clang 21.0.0 (clang-2100.3.34.2), ld
+                    PROJECT:ld-27037.1, macOS 27.0 SDK, cmake 4.4.3 (Homebrew),
+                    GNU Make 3.81, /bin/bash 3.2.57, /usr/bin/perl 5.34.1, NASM
+                    3.02 (Homebrew, /opt/homebrew/bin/nasm), Rosetta 2 installed
+                    2026-10-10. Nothing had to be installed for this build.
+  First run       : 2026-10-11 04:55 UTC (the evening of 2026-10-10, local).
+                    Both scripts configured, built and passed the COMPLETE gate
+                    UNCHANGED on the first attempt - nothing in build-common.sh,
+                    either architecture script, shim/CMakeLists.txt or
+                    shim/smoke-test.c needed a fix. libaom's CMake ran cleanly
+                    under add_subdirectory with AOM_TARGET_CPU passed explicitly:
+                    the arm64 slice got NEON + CRC32 + DOTPROD + I8MM + SVE +
+                    SVE2 kernels (runtime-dispatched), the x86_64 CROSS slice
+                    MMX..SSE4.2 + AVX + AVX2 + AVX512 (runtime-dispatched), its
+                    assembly built by nasm 3.02 as macho64 objects. third_party
+                    compiled: exactly fastfeat + vector on both. 0 warnings in
+                    the arm64 build; 16 in the x64 build, ALL from ld, one per
+                    nasm-assembled object in libaom.a: "no platform load command
+                    found in '...(<name>.asm.o)', assuming: macOS" - nasm's
+                    Mach-O objects carry no LC_BUILD_VERSION, so the linker
+                    assumes the platform; the final dylib's own LC_BUILD_VERSION
+                    was CHECKED at minos 10.14, so the floor is unaffected. The
+                    shim and the smoke test compiled with 0 warnings on both.
+  Reproducibility : not re-measured for libaom; the Vorbis finding applies: ld
+                    derives LC_UUID from output that includes the N_OSO stabs'
+                    .o timestamps, so two builds of the same source ship the same
+                    code under different LC_UUIDs (and signatures) - the sha256
+                    values below identify ONE build, not the source. ld's
+                    -reproducible option fixes it (tested on this Mac for Vorbis)
+                    and is NOT used here yet - a family-wide decision.
   Gate            : thin Mach-O of the right arch (file + lipo), exact exports
                     (nm -gU), install name @rpath/libcodebrix_av1.dylib,
                     system-only dependencies, no LC_RPATH, deployment target
@@ -504,16 +533,86 @@ macOS (the two osx-* entries)
                     LC_UUID equal stripped/unstripped, smoke test.
 
 ================================================================================
-osx-arm64                                     NOT YET BUILT - Jeremy builds on macOS
+osx-arm64                                                         BUILT + PASSED
 ================================================================================
-  cd av1-native-tools/macos && ./build-osx-arm64.sh
-  then replace this block from output/osx-arm64/BUILD-INFO.txt.
+Built            : 2026-10-11 04:55:33 UTC (40 s)
+Built by         : macos/build-osx-arm64.sh (route: native, Apple Silicon)
+Build host       : the Apple Silicon Mac above (macOS 27.0.1, arm64)
+Compiler / SDK   : Apple clang version 21.0.0 (clang-2100.3.34.2) / macOS 27.0 SDK
+                   (Xcode 27.0, 27A266a); perl 5.34.1; no assembler (no x86 assembly)
+cmake            : 4.4.3, generator "Unix Makefiles", AOM_TARGET_CPU=arm64,
+                   CMAKE_OSX_ARCHITECTURES=arm64, CMAKE_OSX_DEPLOYMENT_TARGET=11.0,
+                   CMAKE_BUILD_TYPE=Release, CBA_BUILD_SMOKE_TEST=ON
+libaom config    : AOM_ARCH_AARCH64=1 AOM_ARCH_ARM=1 HAVE_NEON=1 HAVE_ARM_CRC32=1
+                   HAVE_NEON_DOTPROD=1 HAVE_NEON_I8MM=1 HAVE_SVE=1 HAVE_SVE2=1
+                   CONFIG_RUNTIME_CPU_DETECT=1 CONFIG_MULTITHREAD=1 CONFIG_PIC=1
+                   CONFIG_AV1_ENCODER=1 CONFIG_AV1_DECODER=0 CONFIG_AV1_HIGHBITDEPTH=1
+                   CONFIG_LIBYUV=0 CONFIG_WEBM_IO=0 HAVE_PTHREAD_H=1
+                   HAVE_PTHREAD_SETNAME_NP=1 HAVE_UNISTD_H=1
+third_party      : fastfeat vector (exactly)
+File             : libcodebrix_av1.dylib - Mach-O 64-bit arm64, thin (lipo: non-fat);
+                   install name @rpath/libcodebrix_av1.dylib; no LC_RPATH
+Minimum macOS    : 11.0 (checked: LC_BUILD_VERSION minos 11.0; 0 -Wunguarded-availability
+                   warnings; 0 weak imports)
+Size (signed)    : 6171904 bytes (strip -x, then codesign --sign -; signature valid)
+SHA256           : b08206c03429049f0373de54ea039e52d65261fa58240bb60aa0f59faf2ea2bf
+LC_UUID          : 1D2429E0-B2AE-325C-8F24-D6E792B04F01 (equal in the stripped and the
+                   unstripped file)
+Unstripped       : 6932088 bytes -> unstripped/osx-arm64/libcodebrix_av1.dylib
+                   sha256 3d7abdd6612d6ef16508d113b99bfc64612fed432dcc1b4f7618ed256c070b72
+Exports          : exactly the 17 codebrix_av1_* functions (shim/codebrix_av1.exports)
+Dependencies     : /usr/lib/libSystem.B.dylib only
+Build warnings   : 0 (shim + smoke test 0; libaom 0)
+Smoke test       : PASSED on the build host (1871 checks, 0 failed, SMOKE TEST PASSED, exit 0)
+Managed proof    : dotnet test (xUnit v3, 254 tests, 0 skipped; round trips decoded with the
+                   published CodeBrix.VideoPlayback.Dav1d; .NET SDK 10.0.401, arm64) passed
+                   on the build host against this exact file (sha256 above - the copy in the
+                   test output was checked, and no stray dylib sat in the test bin root),
+                   loaded through the library's own resolver from runtimes/osx-arm64/native/,
+                   2026-10-11 UTC
 
 ================================================================================
-osx-x64                                       NOT YET BUILT - Jeremy builds on macOS
+osx-x64                                                           BUILT + PASSED
 ================================================================================
-  cd av1-native-tools/macos && ./build-osx-x64.sh     (Rosetta 2 to verify on Apple Silicon)
-  then replace this block from output/osx-x64/BUILD-INFO.txt.
+Built            : 2026-10-11 04:56:13 UTC (52 s)
+Built by         : macos/build-osx-x64.sh (route: cross-compiled on arm64 via
+                   CMAKE_OSX_ARCHITECTURES=x86_64, verified under Rosetta 2)
+Build host       : the Apple Silicon Mac above (macOS 27.0.1, arm64)
+Compiler / SDK   : Apple clang version 21.0.0 (clang-2100.3.34.2) / macOS 27.0 SDK
+                   (Xcode 27.0, 27A266a); perl 5.34.1; NASM 3.02 (/opt/homebrew/bin/nasm,
+                   Homebrew) - the gate confirmed libaom's assembly was built with it
+cmake            : 4.4.3, generator "Unix Makefiles", AOM_TARGET_CPU=x86_64,
+                   CMAKE_OSX_ARCHITECTURES=x86_64, CMAKE_OSX_DEPLOYMENT_TARGET=10.14,
+                   CMAKE_BUILD_TYPE=Release, CBA_BUILD_SMOKE_TEST=ON
+libaom config    : AOM_ARCH_X86_64=1 HAVE_MMX=1 HAVE_SSE=1 HAVE_SSE2=1 HAVE_SSE3=1
+                   HAVE_SSSE3=1 HAVE_SSE4_1=1 HAVE_SSE4_2=1 HAVE_AVX=1 HAVE_AVX2=1
+                   HAVE_AVX512=1 CONFIG_RUNTIME_CPU_DETECT=1 CONFIG_MULTITHREAD=1
+                   CONFIG_PIC=1 CONFIG_AV1_ENCODER=1 CONFIG_AV1_DECODER=0
+                   CONFIG_AV1_HIGHBITDEPTH=1 CONFIG_LIBYUV=0 CONFIG_WEBM_IO=0
+                   HAVE_PTHREAD_H=1 HAVE_PTHREAD_SETNAME_NP=1 HAVE_UNISTD_H=1
+third_party      : fastfeat vector (exactly; x86inc.asm is included by the .asm files)
+File             : libcodebrix_av1.dylib - Mach-O 64-bit x86_64, thin (lipo: non-fat);
+                   install name @rpath/libcodebrix_av1.dylib; no LC_RPATH
+Minimum macOS    : 10.14 (checked: LC_BUILD_VERSION minos 10.14; 0 -Wunguarded-availability
+                   warnings; 0 weak imports)
+Size (signed)    : 9377584 bytes (strip -x, then codesign --sign -; signature valid)
+SHA256           : 545bb2087dde75fe6303ed4228ec74549e5e5661304e98ffb3ec62a7d70a05c3
+LC_UUID          : 3E568EB3-DAC2-3E99-9CB9-BB18C83C083A (equal in the stripped and the
+                   unstripped file)
+Unstripped       : 10218520 bytes -> unstripped/osx-x64/libcodebrix_av1.dylib
+                   sha256 396c016cf97344715562e53ee48bf0135b63e203a614595a4bc455dbd9aef15c
+Exports          : exactly the 17 codebrix_av1_* functions (shim/codebrix_av1.exports)
+Dependencies     : /usr/lib/libSystem.B.dylib only
+Build warnings   : 16, all ld "no platform load command found in 'libaom.a(<x>.asm.o)',
+                   assuming: macOS" - one per nasm-assembled object (see the macOS header
+                   above); shim + smoke test 0; libaom's C/C++ 0
+Smoke test       : PASSED on the build host under Rosetta 2 (1871 checks, 0 failed, SMOKE
+                   TEST PASSED, exit 0): the x86_64 smoke-test program and the staged dylib
+                   both ran translated, so libaom's runtime cpuid dispatch saw Rosetta's
+                   CPU feature set, not an Intel Mac's
+Managed proof    : NOT RUN - this Mac has only the arm64 .NET SDK, which cannot load an
+                   x86_64 dylib. An x64 .NET 10 SDK under Rosetta 2, or an Intel Mac, would
+                   give the equivalent of the osx-arm64 line.
 
 Host build (NOT shipped)
 --------------------------------------------------------------------------------

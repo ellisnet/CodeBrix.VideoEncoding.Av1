@@ -6,8 +6,9 @@
 #   Written on Linux on 2026-10-10 as a copy of CodeBrix.Audio.FlacWriter's script of the same
 #   name (a copy of CodeBrix.Audio.Vorbis's, run successfully, unchanged, by Jeremy on his Apple
 #   Silicon Mac that day), adapted to libaom.
-#   NOT YET RUN. If something breaks, fix it IN THE SCRIPT (or build-common.sh) and record it in
-#   ../BUILD-PROVENANCE.txt.
+#   FIRST RUN for libaom 2026-10-11 UTC (2026-10-10 evening, local), same Mac: ran UNCHANGED, the
+#   complete gate passed and the result was adopted - see ../BUILD-PROVENANCE.txt. If something
+#   breaks on another machine, fix it IN THE SCRIPT (or build-common.sh) and record it there.
 #
 # USAGE
 #     cd av1-native-tools/macos
