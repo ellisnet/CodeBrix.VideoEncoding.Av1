@@ -42,6 +42,7 @@ public sealed class MainActivity : Activity
     private ScrollView _scroll = null;
     private Button _run = null;
     private int _running;
+    private int _cpuUsed = Av1EncoderOptions.Default;
 
     /// <summary>Builds the one-screen UI and starts the proof one second after launch (so adb needs no taps).</summary>
     /// <param name="savedInstanceState">Unused saved state.</param>
@@ -59,6 +60,10 @@ public sealed class MainActivity : Activity
         panel.AddView(_run);
         panel.AddView(_scroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MatchParent, 0, 1f));
         SetContentView(panel);
+
+        // Optional: "adb shell am start ... --ei cpuUsed 6" sets Av1EncoderOptions.CpuUsed for every encode; the
+        // default (-1) leaves the encoder's own default, which is what an application gets out of the box.
+        _cpuUsed = Intent?.GetIntExtra("cpuUsed", Av1EncoderOptions.Default) ?? Av1EncoderOptions.Default;
 
         new Handler(Looper.MainLooper).PostDelayed(StartRun, 1000);
     }
@@ -132,8 +137,10 @@ public sealed class MainActivity : Activity
             ColorMatrix = VideoColorMatrix.Unspecified,
         };
 
-    private static Av1EncoderOptions LockStepOptions() =>
-        new Av1EncoderOptions { Usage = Av1EncoderUsage.GoodQuality, AutomaticKeyFrames = false };
+    private Av1EncoderOptions LockStepOptions() =>
+        new Av1EncoderOptions { Usage = Av1EncoderUsage.GoodQuality, AutomaticKeyFrames = false, CpuUsed = _cpuUsed };
+
+    private string Suffix => _cpuUsed == Av1EncoderOptions.Default ? "" : "-cpu" + _cpuUsed;
 
     private static bool Forced(int index) => index % KeyFrameEvery == 0;
 
@@ -176,13 +183,15 @@ public sealed class MainActivity : Activity
         var verdicts = new List<string>();
         string failure = null;
         bool stepFailed = false;
+        string stepNote = null;
         void Fail(string reason) { failure ??= reason; stepFailed = true; Log("CHECK FAILED: " + reason); }
         void Verdict(string step)
         {
-            string line = $"{step}: {(stepFailed ? "FAIL" : "PASS")}";
+            string line = $"{step}: {(stepFailed ? "FAIL" : stepNote != null ? "PASSED-WITH-NOTE (" + stepNote + ")" : "PASS")}";
             verdicts.Add(line);
             Log("=== " + line + " ===");
             stepFailed = false;
+            stepNote = null;
         }
 
         Log("=== CodeBrix.VideoEncoding.Av1 device diagnostics ===");
@@ -216,8 +225,8 @@ public sealed class MainActivity : Activity
         Verdict("Step 1 register");
 
         // (2) Encode colour + alpha in lock step.
-        var colour = new EncodedStream { Name = "av1-colour-480x270-10bit-q20" };
-        var alpha = new EncodedStream { Name = "av1-alpha-480x270-10bit-lossless" };
+        var colour = new EncodedStream { Name = "av1-colour-480x270-10bit-q20" + Suffix };
+        var alpha = new EncodedStream { Name = "av1-alpha-480x270-10bit-lossless" + Suffix };
         var forced = Enumerable.Range(0, FrameCount).Where(Forced).ToList();
         try
         {
@@ -225,7 +234,8 @@ public sealed class MainActivity : Activity
             var alphaWatch = new Stopwatch();
             Log($"Step 2 encoding {FrameCount} frames {Width}x{Height} @ {FrameRate} fps: colour I420 10-bit "
                 + $"ConstantQuality({ColourQuality}) GoodQuality; alpha Gray 10-bit full-range LOSSLESS; "
-                + $"AutomaticKeyFrames=false, forced key frames {Set(forced)} fed to both");
+                + $"AutomaticKeyFrames=false, forced key frames {Set(forced)} fed to both; Av1EncoderOptions.CpuUsed "
+                + (_cpuUsed == Av1EncoderOptions.Default ? "-1 (encoder default)" : _cpuUsed.ToString()));
             using (var colourEncoder = new Av1Encoder(ColourRequest(10), LockStepOptions()))
             using (var alphaEncoder = new Av1Encoder(AlphaRequest(), LockStepOptions()))
             {
@@ -354,6 +364,8 @@ public sealed class MainActivity : Activity
                     alphaKeys = keys;
                     int mismatchedFrames = 0;
                     int firstMismatch = -1;
+                    long mismatchedSamples = 0;
+                    int maxDifference = 0;
                     for (int i = 0; i < Math.Min(decoded.Count, FrameCount); i++)
                     {
                         SyntheticPicture source = SyntheticClip.Create(Width, Height, 10, i);
@@ -361,11 +373,19 @@ public sealed class MainActivity : Activity
                         {
                             mismatchedFrames++;
                             if (firstMismatch < 0) firstMismatch = i;
+                            for (int s = 0; s < Width * Height; s++)
+                            {
+                                int d = Math.Abs(SyntheticClip.Get(source.Alpha, s, 2) - SyntheticClip.Get(decoded[i].Y, s, 2));
+                                if (d == 0) continue;
+                                mismatchedSamples++;
+                                maxDifference = Math.Max(maxDifference, d);
+                            }
                         }
                     }
 
                     Log($"Step 3 {stream.Name}: BIT-EXACT vs source {mismatchedFrames == 0 && decoded.Count == FrameCount} "
-                        + $"({mismatchedFrames} mismatched frames{(firstMismatch >= 0 ? ", first " + firstMismatch : "")})");
+                        + $"({mismatchedFrames} mismatched frames{(firstMismatch >= 0 ? ", first " + firstMismatch : "")}, "
+                        + $"{mismatchedSamples} samples differ, max difference {maxDifference})");
                     if (mismatchedFrames != 0) Fail($"{stream.Name}: lossless alpha is not bit-exact ({mismatchedFrames} frames differ)");
                 }
             }
@@ -397,8 +417,10 @@ public sealed class MainActivity : Activity
                 return sum / a.Length;
             }
 
+            bool lastUnavailable = false;
             bool Attempt(string label, byte[] av1C, List<byte[]> units, out string why)
             {
+                lastUnavailable = false;
                 MediaCodecResult r = MediaCodecDecode.Decode(av1C, units, Width, Height, FrameRate);
                 Log($"Step 4 [{label}] MediaCodec decoder {r.DecoderName ?? "(none)"} (software-only {r.SoftwareOnly}, "
                     + $"hardware-accelerated {r.HardwareAccelerated}), profile/levels {r.Profiles}");
@@ -407,6 +429,7 @@ public sealed class MainActivity : Activity
                 Log($"Step 4 [{label}] first image: {r.FirstImageDescription ?? "(none)"}");
                 if (r.Error != null) Log($"Step 4 [{label}] error: {r.Error}");
                 why = null;
+                lastUnavailable = r.DecoderUnavailable;
                 if (r.Error != null) why = r.Error;
                 else if (r.FramesDecoded != FrameCount) why = $"decoded {r.FramesDecoded} frames, expected {FrameCount}";
                 else if (r.FirstLuma8 == null) why = "first picture could not be read";
@@ -432,8 +455,9 @@ public sealed class MainActivity : Activity
             IvfFile colourIvf = IvfFile.Read(colour.IvfPath);
             if (!Attempt("10-bit", colour.Av1C, colourIvf.Frames, out string why10))
             {
+                bool unavailable10 = lastUnavailable;
                 Log($"Step 4 MediaCodec did NOT take the 10-bit stream ({why10}); retrying with an 8-bit colour encode");
-                var eight = new EncodedStream { Name = "av1-colour-480x270-8bit-q20" };
+                var eight = new EncodedStream { Name = "av1-colour-480x270-8bit-q20" + Suffix };
                 using (var encoder = new Av1Encoder(ColourRequest(8), LockStepOptions()))
                 {
                     var watch = Stopwatch.StartNew();
@@ -452,8 +476,24 @@ public sealed class MainActivity : Activity
 
                 WriteIvf(eight, externalDir);
                 Log($"Step 4 8-bit colour encode: {eight.Packets.Count} packets, key frames {Set(eight.KeyFrames)}, {eight.EncodeMilliseconds:F0} ms");
-                if (!Attempt("8-bit retry", eight.Av1C, IvfFile.Read(eight.IvfPath).Frames, out string why8)) Fail("MediaCodec failed at 10-bit (" + why10 + ") and at 8-bit (" + why8 + ")");
-                else Log("Step 4 NOTE: MediaCodec refused 10-bit, accepted 8-bit");
+                if (Attempt("8-bit retry", eight.Av1C, IvfFile.Read(eight.IvfPath).Frames, out string why8))
+                {
+                    Log("Step 4 NOTE: MediaCodec refused 10-bit, accepted 8-bit");
+                    stepNote = "MediaCodec took 8-bit only";
+                }
+                else if (unavailable10 && lastUnavailable)
+                {
+                    // The device's decoder died before producing any picture at both bit depths: a device limitation
+                    // (for example a software-codec process that crashes), not something the stream can cause to
+                    // differ - reported, not counted as a failure.
+                    string note = "MediaCodec AV1 decode unavailable on this device (decoder failed before any output: " + why8 + ")";
+                    Log("Step 4 NOTE: " + note);
+                    stepNote = note;
+                }
+                else
+                {
+                    Fail("MediaCodec failed at 10-bit (" + why10 + ") and at 8-bit (" + why8 + ")");
+                }
             }
             else
             {

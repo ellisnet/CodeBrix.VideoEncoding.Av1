@@ -11,6 +11,9 @@
     <File Path="README.md" />
     <File Path="THIRD-PARTY-NOTICES.txt" />
   </Folder>
+  <Folder Name="/Samples/">
+    <Project Path="samples/Av1Diagnostics/Av1Diagnostics.csproj" />
+  </Folder>
   <Folder Name="/Tests/">
     <Project Path="tests/CodeBrix.VideoEncoding.Av1.Tests/CodeBrix.VideoEncoding.Av1.Tests.csproj" />
   </Folder>

@@ -157,7 +157,10 @@ Av1EncoderOptions  (AV1-specific settings; all default to "encoder decides")
 -----------------
     Av1EncoderUsage Usage = GoodQuality   GoodQuality | Realtime | AllIntra
     int CpuUsed = -1                      speed 0 (slowest/best) .. 9 (fastest);
-                                          wins over the request's Speed
+                                          wins over the request's Speed; -1
+                                          with Speed 0 = the usage default
+                                          (6 GoodQuality / AllIntra,
+                                          8 Realtime)
     Av1RateMode RateMode = Automatic      Automatic | ConstantQuality |
                                           ConstrainedQuality | VariableBitrate |
                                           ConstantBitrate
@@ -217,11 +220,21 @@ HOW THE REQUEST IS INTERPRETED
                          ignored): with look-ahead the encoder's lossless mode
                          is not bit-exact at 10 bits. So each lossless frame's
                          packet comes out of the Encode call that made it.
+                         Lossless also switches off one-sided compound
+                         prediction (codec option enable-onesided-comp=0):
+                         with it, the encoder's lossless output is not
+                         bit-exact at its slowest speeds (cpu-used 0-2) at 10
+                         and 12 bits. A CodecOptions enable-onesided-comp
+                         other than 0 is refused for lossless
+                         (ArgumentException). Speed stays your choice.
     Threads              0 -> processor count, capped at 16; 1..64
     MaxKeyFrameInterval  0 -> the encoder's default (rare automatic key
                          frames); 1..65535 -> at most that many frames apart
-    Speed                0 -> the encoder's default; 1..9 -> cpu-used (higher
-                         is faster); above 9 -> ArgumentOutOfRangeException
+    Speed                0 -> the usage's default cpu-used: 6 for GoodQuality
+                         and AllIntra, 8 for Realtime; 1..9 -> cpu-used
+                         (higher is faster); above 9 ->
+                         ArgumentOutOfRangeException. Av1EncoderOptions.
+                         CpuUsed 0..9 wins over both.
     Colour tags          written as the AV1 code points: Bt709 1,
                          Bt601Pal 5, Bt601Ntsc 6, Bt2020 9, DciP3 11,
                          DisplayP3 12; transfer Bt709 1, Linear 8, Srgb 13,
@@ -357,7 +370,7 @@ MINIMUM VIABLE PROJECT TEMPLATE
 
 PERFORMANCE TIPS
 ================
-* Speed (cpu-used) is the big lever: 6 is a good offline default, 8-9 for
+* Speed (cpu-used) is the big lever: 6 is the GoodQuality default, 8-9 for
   previews and tests, 0-3 only when time does not matter.
 * Leave Threads at 0 (processor count, capped at 16) unless several encoders
   run at once - then divide the cores between them. Tiles
@@ -370,6 +383,11 @@ COMMON PITFALLS TO AVOID
 ========================
 * Passing NV12 or RGBA frames - convert to I420 / I444 (and alpha to a Gray
   frame) first; the encoder refuses them (NotSupportedException).
+* Switching lossless safeguards back on - lossless streams are always encoded
+  without look-ahead and without one-sided compound prediction, because with
+  either the encoder's lossless output is not bit-exact at 10 bits. Passing
+  CodecOptions enable-onesided-comp=1 with Lossless is refused; LagInFrames is
+  ignored for lossless.
 * Odd I420 sizes - I420 needs an even width and height (refused with
   NotSupportedException); pad or crop, or use I444 / Gray, which take odd
   sizes. A Gray alpha stream beside an odd-sized I444 picture is fine.
@@ -390,8 +408,11 @@ COMMON PITFALLS TO AVOID
   which differ between a colour picture and its alpha. Use
   AutomaticKeyFrames = false and force the same frames in both.
 * Setting Quality together with Lossless - Core's validation refuses it.
-* Expecting Speed 0 to mean "slowest" - 0 means "encoder default"; use
-  Av1EncoderOptions.CpuUsed = 0 for the slowest setting.
+* Expecting Speed 0 to mean "slowest" - 0 means "the default" (cpu-used 6
+  for GoodQuality, 8 for Realtime, 6 for AllIntra); use
+  Av1EncoderOptions.CpuUsed = 0 for the slowest setting, and expect it to be
+  many times slower (on a phone, a 480x270 10-bit stream encodes at about
+  1 fps at cpu-used 0 versus over 15 fps at 6).
 * Calling Register() from a library - the application registers, once.
 
 WHAT THIS PACKAGE DOES NOT DO

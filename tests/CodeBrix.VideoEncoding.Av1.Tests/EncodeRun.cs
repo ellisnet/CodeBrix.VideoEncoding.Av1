@@ -41,10 +41,10 @@ internal static class EncodeRun
         return packets;
     }
 
-    public static List<TestPicture> Pictures(VideoPixelLayout layout, int bitDepth, int count, int width = Width, int height = Height, int stridePadding = 0, int seed = 0)
+    public static List<TestPicture> Pictures(VideoPixelLayout layout, int bitDepth, int count, int width = Width, int height = Height, int stridePadding = 0, int seed = 0, double noise = 0)
     {
         List<TestPicture> pictures = new List<TestPicture>(count);
-        for (int i = 0; i < count; i++) pictures.Add(TestPicture.Create(layout, width, height, bitDepth, i, stridePadding, seed));
+        for (int i = 0; i < count; i++) pictures.Add(TestPicture.Create(layout, width, height, bitDepth, i, stridePadding, seed, noise));
         return pictures;
     }
 

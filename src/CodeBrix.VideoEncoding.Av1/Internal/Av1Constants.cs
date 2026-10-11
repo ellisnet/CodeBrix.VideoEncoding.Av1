@@ -75,6 +75,15 @@ internal static class Av1Constants
     /// <summary><c>CBA_OPT_AUTOMATIC_KEY_FRAMES</c>.</summary>
     public const int OptAutomaticKeyFrames = 17;
 
+    /// <summary>The cpu-used a GoodQuality stream gets when neither the request nor the options choose one.</summary>
+    public const int DefaultCpuUsedGoodQuality = 6;
+
+    /// <summary>The cpu-used a Realtime stream gets when neither the request nor the options choose one (libaom's realtime range is 5..9).</summary>
+    public const int DefaultCpuUsedRealtime = 8;
+
+    /// <summary>The cpu-used an AllIntra stream gets when neither the request nor the options choose one.</summary>
+    public const int DefaultCpuUsedAllIntra = 6;
+
     /// <summary>The largest width and height AV1 allows.</summary>
     public const int MaxDimension = 65536;
 

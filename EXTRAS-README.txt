@@ -52,3 +52,24 @@ exactness (lossless). IvfWriter.cs is a tiny IVF writer for dumping test
 output to inspect with other tools: set CODEBRIX_AV1_TEST_DUMP_DIR to a folder
 and the IVF test writes its stream there. It lives in the tests only - the
 library knows nothing about containers.
+
+
+ANDROID DIAGNOSTICS SAMPLE
+==========================
+    samples/Av1Diagnostics/
+
+A small .NET for Android app (API 33 and later) that proves the package on a
+real device: it registers the encoder, encodes a generated 2-second 480x270
+10-bit colour clip and its lossless monochrome alpha matte in lock step
+(forced key frames every 30 frames, automatic key frames off), writes both as
+IVF files, decodes them with the CodeBrix.VideoPlayback.Dav1d package (frame
+counts, key-frame positions, PSNR of the colour stream, bit-exactness of the
+alpha stream) and the colour stream again with the device's own MediaCodec AV1
+decoder, reports the encode speed, and prints "AV1-DIAG RESULT: PASS" (also to
+logcat, tag Av1Diag). It references the library by ProjectReference, which
+does NOT carry the runtimes natives into an APK, so its csproj adds explicit
+AndroidNativeLibrary items for android-arm64 and android-x64; an application
+that references the published package needs nothing of the kind. Its
+README.txt has the adb install / launch / log-collection commands. Build it in
+Release with the android workload installed; it is in the solution's Samples
+folder.

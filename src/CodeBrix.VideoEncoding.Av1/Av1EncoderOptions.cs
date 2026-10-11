@@ -41,8 +41,10 @@ public sealed class Av1EncoderOptions
 
     /// <summary>
     /// The speed / quality trade-off, libaom's "cpu-used": 0 (slowest, best) to 9 (fastest); <see cref="Default" />
-    /// (-1, the default) lets the request's <c>Speed</c> decide, or the encoder when that is 0 too. Unlike
-    /// <c>Speed</c>, this can ask for cpu-used 0. When both are set, this one wins.
+    /// (-1, the default) lets the request's <c>Speed</c> decide; when that is 0 too, the usage's default is used:
+    /// 6 for <see cref="Av1EncoderUsage.GoodQuality" /> and <see cref="Av1EncoderUsage.AllIntra" />, 8 for
+    /// <see cref="Av1EncoderUsage.Realtime" />. Unlike <c>Speed</c>, this can ask for cpu-used 0. When both are set,
+    /// this one wins.
     /// </summary>
     public int CpuUsed { get; set; } = Default;
 

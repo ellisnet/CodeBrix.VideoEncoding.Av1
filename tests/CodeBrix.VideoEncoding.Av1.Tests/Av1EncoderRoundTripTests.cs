@@ -79,6 +79,9 @@ public class Av1EncoderRoundTripTests
         encoder.SequenceHeader.Profile.Should().Be(bitDepth == 12 ? 2 : (layout == VideoPixelLayout.I444 ? 1 : 0));
     }
 
+    // The content is a soft-edged moving MATTE at cpu-used 0: the combination that exposed the encoder's non-exact
+    // lossless at cpu-used 0-2 (smooth gradients and noise did not). Switching off one-sided compound prediction
+    // (always done for lossless) makes these exact; without it the 10- and 12-bit rows fail.
     [Theory]
     [InlineData(VideoPixelLayout.I420, 8)]
     [InlineData(VideoPixelLayout.I420, 10)]
@@ -90,22 +93,86 @@ public class Av1EncoderRoundTripTests
     public void lossless_round_trip_is_bit_exact(VideoPixelLayout layout, int bitDepth)
     {
         //Act
-        var run = Run(Lossless(layout, bitDepth), frames: 12);
+        var run = RunMatte(Lossless(layout, bitDepth), 48, new Av1EncoderOptions { CpuUsed = 0, AutomaticKeyFrames = false });
         using Av1Encoder encoder = run.Encoder;
 
         //Assert
-        run.Decoded.Count.Should().Be(12);
-        for (int i = 0; i < run.Decoded.Count; i++)
+        AssertBitExact(run.Pictures, run.Decoded, 48);
+    }
+
+    [Theory]
+    [InlineData(VideoPixelLayout.Gray, 10, 320, 180)]
+    [InlineData(VideoPixelLayout.I420, 10, 162, 92)]
+    [InlineData(VideoPixelLayout.I420, 8, 320, 180)]
+    [InlineData(VideoPixelLayout.Gray, 8, 320, 180)]
+    public void lossless_round_trip_is_bit_exact_at_every_slow_cpu_used(VideoPixelLayout layout, int bitDepth, int width, int height)
+    {
+        foreach (int cpuUsed in new[] { 0, 1, 2, 3 })
         {
-            run.Decoded[i].Y.Should().Equal(run.Pictures[i].Y);
-            if (layout == VideoPixelLayout.Gray)
+            //Act
+            var run = RunMatte(Lossless(layout, bitDepth, width, height), 48, new Av1EncoderOptions { CpuUsed = cpuUsed, AutomaticKeyFrames = false });
+            using Av1Encoder encoder = run.Encoder;
+
+            //Assert
+            AssertBitExact(run.Pictures, run.Decoded, 48);
+        }
+    }
+
+    [Fact]
+    public void lossless_round_trip_is_bit_exact_at_the_default_speed_and_one_thread()
+    {
+        //Arrange
+        VideoEncoderRequest request = Lossless(VideoPixelLayout.Gray, 10);
+        request.Speed = 0;
+        request.Threads = 1;
+
+        //Act
+        var run = RunMatte(request, 48);
+        using Av1Encoder encoder = run.Encoder;
+
+        //Assert
+        AssertBitExact(run.Pictures, run.Decoded, 48);
+    }
+
+    [Fact]
+    public void lossless_round_trip_is_bit_exact_on_noisy_content()
+    {
+        //Arrange
+        Av1Encoder encoder = new Av1Encoder(Lossless(VideoPixelLayout.I420, 10), new Av1EncoderOptions { CpuUsed = 0 });
+        List<TestPicture> pictures = EncodeRun.Pictures(VideoPixelLayout.I420, 10, 16, noise: 0.1);
+
+        //Act
+        List<EncodedVideoPacket> packets = EncodeRun.EncodeAll(encoder, pictures);
+        List<DecodedPicture> decoded = Dav1dDecode.Decode(encoder.CodecConfigurationRecord, packets);
+        encoder.Dispose();
+
+        //Assert
+        AssertBitExact(pictures, decoded, 16);
+    }
+
+    private static (List<TestPicture> Pictures, List<DecodedPicture> Decoded, Av1Encoder Encoder) RunMatte(VideoEncoderRequest request, int frames, Av1EncoderOptions options = null)
+    {
+        Av1Encoder encoder = new Av1Encoder(request, options ?? new Av1EncoderOptions { AutomaticKeyFrames = false });
+        List<TestPicture> pictures = Enumerable.Range(0, frames).Select(i => TestPicture.CreateMatte(request.PixelLayout, request.Width, request.Height, request.BitDepth, i, frames)).ToList();
+        List<EncodedVideoPacket> packets = EncodeRun.EncodeAll(encoder, pictures, new HashSet<int> { 0, frames / 2 });
+        List<DecodedPicture> decoded = Dav1dDecode.Decode(encoder.CodecConfigurationRecord, packets);
+        return (pictures, decoded, encoder);
+    }
+
+    private static void AssertBitExact(IReadOnlyList<TestPicture> pictures, IReadOnlyList<DecodedPicture> decoded, int frames)
+    {
+        decoded.Count.Should().Be(frames);
+        for (int i = 0; i < decoded.Count; i++)
+        {
+            decoded[i].Y.Should().Equal(pictures[i].Y);
+            if (pictures[i].U == null)
             {
-                run.Decoded[i].U.Should().BeNull();
+                decoded[i].U.Should().BeNull();
                 continue;
             }
 
-            run.Decoded[i].U.Should().Equal(run.Pictures[i].U);
-            run.Decoded[i].V.Should().Equal(run.Pictures[i].V);
+            decoded[i].U.Should().Equal(pictures[i].U);
+            decoded[i].V.Should().Equal(pictures[i].V);
         }
     }
 

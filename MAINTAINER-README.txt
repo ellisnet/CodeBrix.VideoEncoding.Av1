@@ -256,8 +256,16 @@ every refusal happens there, before any native call.
     Lossless                          LOSSLESS = 1, no rate options; the shim
                                       forces lag-in-frames 0 (LagInFrames is
                                       ignored - see NOTES)
-    Speed 0 / 1..9 / >9               unset / CPU_USED / refused
+    Speed 0 (and CpuUsed -1)          CPU_USED = usage default: 6 GoodQuality,
+                                      8 Realtime, 6 AllIntra (Av1Constants);
+                                      libaom's own default would be 0 - far
+                                      too slow (device proof: 0.8 vs 17.5 fps)
+    Speed 1..9 / >9                   CPU_USED / refused
     options.CpuUsed 0..9              CPU_USED (wins over Speed)
+    Lossless                          also string option enable-onesided-comp=0
+                                      (first, before CodecOptions); a
+                                      CodecOptions value other than 0 for it is
+                                      refused (ArgumentException)
     Threads 0 / 1..64 / >64           min(ProcessorCount, 16) / as given /
                                       refused
     options.RowMultithreading         ROW_MULTITHREADING 0/1 (always set)
@@ -360,6 +368,28 @@ NOTES
     odd-width 4:2:0 picture (seen with both wrapped and allocated images), so
     the shim's create() and the managed mapper refuse odd I420 widths and
     heights; I444 and Gray round-trip bit-exact at odd sizes (tested).
+  * LOSSLESS DISABLES ONE-SIDED COMPOUND PREDICTION (MANAGED POLICY - the
+    native is unchanged): at cpu-used 0, 1 and 2 libaom's lossless output is
+    not bit-exact at 10 and 12 bits (I420, I444 and Gray alike; 8 bits was
+    exact). Found by the Android device proof, reproduced on the host; the
+    trigger is CONTENT - a soft-edged moving matte (an alpha channel) fails,
+    smooth gradients and pseudo-random noise stayed exact. The native agent
+    traced it to one-sided compound prediction, which libaom's
+    speed_features.c only disables from GoodQuality speed 3. So
+    Internal/Av1RequestMapper.cs always passes enable-onesided-comp=0 for
+    lossless (before the caller's CodecOptions, and refuses a caller value
+    other than 0). Verified empirically with NO speed floor: every lossless
+    matte round trip (cpu-used 0, 1, 2, 3; Gray / I420 / I444; 8, 10, 12 bits;
+    default threads and Threads = 1) is bit-exact with the option alone, and
+    removing the option makes the 10- and 12-bit ones fail again. cpu-used
+    stays the caller's choice. The lossless tests use matte content
+    (TestPicture.CreateMatte) at EXPLICIT cpu-used 0..3 so they keep
+    detecting this class of defect now that the default speed is 6.
+  * DEFAULT SPEED: libaom's own GoodQuality default is cpu-used 0, which the
+    device proof measured at 0.8 fps (Pixel) / 2.1 fps (HP) for 480x270
+    10-bit, versus 17.5 / 63.6 fps at cpu-used 6. The mapper therefore always
+    sets cpu-used: the usage default (6 / 8 / 6) unless Speed or CpuUsed
+    choose.
 - CodeBrix.VideoProcessing.Core is pinned in BOTH csprojs (library and tests);
   raise them together.
 

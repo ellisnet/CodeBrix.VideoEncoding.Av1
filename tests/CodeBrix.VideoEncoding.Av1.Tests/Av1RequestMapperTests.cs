@@ -272,8 +272,8 @@ public class Av1RequestMapperTests
     }
 
     [Fact]
-    public void Map_leaves_cpu_used_unset_for_speed_zero()
-        => Has(Map(Request()), Av1Constants.OptCpuUsed).Should().BeFalse();
+    public void Map_sets_the_default_cpu_used_for_speed_zero()
+        => Int(Map(Request()), Av1Constants.OptCpuUsed).Should().Be(6);
 
     [Fact]
     public void Map_passes_speed_as_cpu_used()
@@ -621,5 +621,91 @@ public class Av1RequestMapperTests
 
         //Assert
         act.Should().Throw<NotSupportedException>();
+    }
+
+    [Theory]
+    [InlineData(Av1EncoderUsage.GoodQuality, 6)]
+    [InlineData(Av1EncoderUsage.Realtime, 8)]
+    [InlineData(Av1EncoderUsage.AllIntra, 6)]
+    public void Map_uses_the_usage_default_cpu_used(Av1EncoderUsage usage, int expected)
+        => Int(Map(Request(), new Av1EncoderOptions { Usage = usage }), Av1Constants.OptCpuUsed).Should().Be(expected);
+
+    [Theory]
+    [InlineData(Av1EncoderUsage.GoodQuality, 2, -1, 2)]
+    [InlineData(Av1EncoderUsage.Realtime, 9, -1, 9)]
+    [InlineData(Av1EncoderUsage.AllIntra, 4, 0, 0)]
+    [InlineData(Av1EncoderUsage.GoodQuality, 0, 1, 1)]
+    public void Map_lets_explicit_speed_or_cpu_used_override_the_default(Av1EncoderUsage usage, int speed, int cpuUsed, int expected)
+    {
+        //Arrange
+        VideoEncoderRequest request = Request();
+        request.Speed = speed;
+
+        //Act
+        Av1NativeSettings settings = Map(request, new Av1EncoderOptions { Usage = usage, CpuUsed = cpuUsed });
+
+        //Assert
+        Int(settings, Av1Constants.OptCpuUsed).Should().Be(expected);
+    }
+
+    [Fact]
+    public void Map_leaves_cpu_used_to_the_caller_for_lossless()
+    {
+        //Arrange
+        VideoEncoderRequest request = Request();
+        request.Lossless = true;
+
+        //Act
+        Av1NativeSettings settings = Map(request, new Av1EncoderOptions { CpuUsed = 0 });
+
+        //Assert
+        Int(settings, Av1Constants.OptCpuUsed).Should().Be(0);
+    }
+
+    [Fact]
+    public void Map_disables_onesided_compound_prediction_for_lossless_only()
+    {
+        //Arrange
+        VideoEncoderRequest lossless = Request();
+        lossless.Lossless = true;
+        lossless.CodecOptions["tune"] = "psnr";
+
+        //Act
+        Av1NativeSettings losslessSettings = Map(lossless);
+        Av1NativeSettings lossySettings = Map(Request());
+
+        //Assert
+        losslessSettings.StringOptions.Select(o => o.Key).Should().ContainInOrder("enable-onesided-comp", "tune");
+        losslessSettings.StringOptions[0].Value.Should().Be("0");
+        lossySettings.StringOptions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Map_refuses_switching_onesided_compound_prediction_back_on_for_lossless()
+    {
+        //Arrange
+        VideoEncoderRequest request = Request();
+        request.Lossless = true;
+        request.CodecOptions["enable-onesided-comp"] = "1";
+
+        //Act
+        Action act = () => Map(request);
+
+        //Assert
+        act.Should().Throw<ArgumentException>().Which.ParamName.Should().Be("CodecOptions");
+    }
+
+    [Fact]
+    public void Map_allows_onesided_compound_prediction_options_for_lossy()
+    {
+        //Arrange
+        VideoEncoderRequest request = Request();
+        request.CodecOptions["enable-onesided-comp"] = "1";
+
+        //Act
+        Av1NativeSettings settings = Map(request);
+
+        //Assert
+        settings.StringOptions.Single().Value.Should().Be("1");
     }
 }

@@ -21,7 +21,10 @@ namespace CodeBrix.VideoEncoding.Av1.Internal;
 /// <item>Quality: a constant-quality level 0..51 -> cq-level round(level * 63 / 51); the default leaves the
 /// encoder's cq-level; a target bitrate -> variable bitrate at that rate (unless the options choose another
 /// bitrate mode). Lossless -> CBA_OPT_LOSSLESS and no quality.</item>
-/// <item>Speed 0 -> the encoder's cpu-used; 1..9 -> cpu-used; Av1EncoderOptions.CpuUsed (0..9) wins over it.</item>
+/// <item>cpu-used: Av1EncoderOptions.CpuUsed (0..9) when set, else the request's Speed 1..9, else the usage's default
+/// (6 GoodQuality, 8 Realtime, 6 AllIntra).</item>
+/// <item>Lossless also sets the libaom option enable-onesided-comp=0 (one-sided compound prediction makes lossless
+/// output inexact); a codec option switching it back on is refused.</item>
 /// <item>Threads 0 -> min(processor count, 16); 1..64 as given.</item>
 /// <item>MaxKeyFrameInterval 0 -> the encoder's default; 1..65535 -> kf-max-dist. AutomaticKeyFrames = false ->
 /// CBA_OPT_AUTOMATIC_KEY_FRAMES 0 (only frame 0 and forced frames are key frames; refused with an interval).</item>
@@ -117,7 +120,14 @@ internal static class Av1RequestMapper
         }
 
         MapColor(request, options, settings);
+
+        // Lossless: one-sided compound prediction makes the encoder's lossless output inexact (libaom enables it at
+        // GoodQuality cpu-used 0..2), so it is always switched off - before the caller's codec options, which may not
+        // switch it back on.
+        if (request.Lossless) settings.StringOptions.Add(new KeyValuePair<string, string>(LosslessDisabledTool, "0"));
+
         MapCodecOptions(request.CodecOptions, settings);
+        GuardLosslessCodecOptions(request);
         return settings;
     }
 
@@ -154,9 +164,22 @@ internal static class Av1RequestMapper
                 $"For AV1, Speed is libaom's cpu-used: 1 (slowest, best) to {Av1EncoderOptions.MaxCpuUsed} (fastest), or 0 for the encoder's default.");
         }
 
-        int cpuUsed = options.CpuUsed != Av1EncoderOptions.Default ? options.CpuUsed : (request.Speed > 0 ? request.Speed : -1);
-        if (cpuUsed >= 0) settings.IntOptions.Add(Pair(Av1Constants.OptCpuUsed, cpuUsed));
+        int cpuUsed = options.CpuUsed != Av1EncoderOptions.Default
+            ? options.CpuUsed
+            : (request.Speed > 0 ? request.Speed : DefaultCpuUsed(options.Usage));
+
+        settings.IntOptions.Add(Pair(Av1Constants.OptCpuUsed, cpuUsed));
     }
+
+    /// <summary>The cpu-used used when neither the request's Speed nor the options' CpuUsed chooses one.</summary>
+    /// <param name="usage">The usage profile.</param>
+    /// <returns>6 for GoodQuality and AllIntra, 8 for Realtime.</returns>
+    public static int DefaultCpuUsed(Av1EncoderUsage usage) => usage switch
+    {
+        Av1EncoderUsage.Realtime => Av1Constants.DefaultCpuUsedRealtime,
+        Av1EncoderUsage.AllIntra => Av1Constants.DefaultCpuUsedAllIntra,
+        _ => Av1Constants.DefaultCpuUsedGoodQuality,
+    };
 
     private static void MapRate(VideoEncoderRequest request, Av1EncoderOptions options, Av1NativeSettings settings)
     {
@@ -282,6 +305,27 @@ internal static class Av1RequestMapper
 
         if (request.PixelLayout == VideoPixelLayout.I420 && options.ChromaSamplePosition != Av1ChromaSamplePosition.Unknown)
             settings.IntOptions.Add(Pair(Av1Constants.OptChromaSamplePosition, (int)options.ChromaSamplePosition));
+    }
+
+    /// <summary>
+    /// The libaom option a lossless stream always sets to 0: one-sided compound prediction makes the encoder's
+    /// lossless output not bit-exact (libaom only disables the tool itself from GoodQuality speed 3 up).
+    /// </summary>
+    public const string LosslessDisabledTool = "enable-onesided-comp";
+
+    // A caller's codec option must not undo the lossless safeguard (pass-through options are applied last).
+    private static void GuardLosslessCodecOptions(VideoEncoderRequest request)
+    {
+        if (!request.Lossless) return;
+
+        if (request.CodecOptions.TryGetValue(LosslessDisabledTool, out string tool) && tool.Trim() != "0")
+        {
+            throw new ArgumentException(
+                $"Codec option {LosslessDisabledTool}={tool} cannot be used for a lossless stream: one-sided compound "
+                + "prediction makes the encoder's lossless output inexact, so it is always switched off for lossless.",
+                nameof(VideoEncoderRequest.CodecOptions));
+        }
+
     }
 
     private static void MapCodecOptions(IDictionary<string, string> codecOptions, Av1NativeSettings settings)

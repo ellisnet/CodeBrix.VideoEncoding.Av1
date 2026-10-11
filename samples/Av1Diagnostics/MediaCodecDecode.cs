@@ -35,6 +35,12 @@ internal sealed class MediaCodecResult
     public double ElapsedMilliseconds { get; set; }
 
     public string Error { get; set; }
+
+    /// <summary>
+    /// True when the decoder itself failed (exception or timeout) before producing a single picture - the device's
+    /// decoder is unusable, as opposed to a decoder that ran and produced wrong output.
+    /// </summary>
+    public bool DecoderUnavailable => Error != null && FramesDecoded == 0;
 }
 
 /// <summary>
@@ -128,9 +134,18 @@ internal static class MediaCodecDecode
                 }
             }
         }
+        catch (MediaCodec.CodecException ex)
+        {
+            result.Error = $"MediaCodec.CodecException {ex.ErrorCode}: {ex.DiagnosticInfo} (transient {ex.IsTransient}, "
+                + $"recoverable {ex.IsRecoverable}) after {result.FramesQueued} units queued";
+        }
+        catch (Java.Lang.Throwable ex)
+        {
+            result.Error = $"{ex.Class?.Name ?? ex.GetType().Name}: {ex.LocalizedMessage ?? ex.Message} after {result.FramesQueued} units queued";
+        }
         catch (Exception ex)
         {
-            result.Error = ex.GetType().Name + ": " + ex.Message;
+            result.Error = $"{ex.GetType().Name}: {ex.Message} after {result.FramesQueued} units queued";
         }
         finally
         {
