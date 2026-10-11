@@ -72,10 +72,10 @@ WHAT BUILDS WHERE
   linux-riscv64  linux/build.sh riscv64          ditto (+ qemu binfmt)   built here
   android-arm64  android/build.sh arm64          Linux/macOS + NDK 30    built here
   android-x64    android/build.sh x64            Linux/macOS + NDK 30    built here
-  win-x64        windows/build-win-x64.ps1       x64 Windows + VS C++    NOT YET BUILT (Jeremy)
+  win-x64        windows/build-win-x64.ps1       x64 Windows + VS C++    built (Jeremy's x64 box)
                                                  + Perl + nasm
-  win-arm64      windows/build-win-arm64.ps1     ARM64 Windows (or x64,  NOT YET BUILT (Jeremy)
-                                                 cross; smoke test unrun)
+  win-arm64      windows/build-win-arm64.ps1     ARM64 Windows (or x64,  cross-built there;
+                                                 cross; smoke test unrun) smoke test UNRUN
   osx-arm64      macos/build-osx-arm64.sh        Apple Silicon Mac       NOT YET BUILT (Jeremy)
   osx-x64        macos/build-osx-x64.sh          Intel Mac, or Apple     NOT YET BUILT (Jeremy)
                                                  Silicon + Rosetta 2;
@@ -89,11 +89,17 @@ Perl required, nasm required for the x64 slices (checked on PATH the dav1d way,
 and the gate checks libaom really assembled with it), AOM_TARGET_CPU passed
 explicitly (a cross build's CMAKE_SYSTEM_PROCESSOR is the host's), one composed
 licence file (re-composed and compared by the Windows gate), 17 exports, and the
-smoke test at shim/smoke-test.c. win-arm64 uses MSVC's ARM64 toolset; libaom's
-MSVC ARM64 path is less travelled - if MSVC fails there, the fallback is
-clang-cl (build-win-arm64.ps1's header says how). They have NOT been run for
-libaom. They gate themselves exactly as the FlacWriter ones do; if one breaks,
-fix it in the script and record it in BUILD-PROVENANCE.txt.
+smoke test at shim/smoke-test.c. The Windows scripts first ran for libaom on
+2026-10-10 on Jeremy's x64 Windows 11 machine (Visual Studio 2026, Strawberry
+Perl 5.42, NASM 3.02) and ran UNCHANGED with no fix needed anywhere; win-arm64
+built with MSVC's ARM64 toolset on the first try (NEON, CRC32, dot-product and
+I8MM kernels, runtime-dispatched - the clang-cl fallback described in
+build-win-arm64.ps1's header was not needed). It was cross-built with
+-AdoptCrossBuild, so its smoke test is still UNRUN - finish it on an ARM64
+Windows device (Surface Pro X) as that header describes. The macOS scripts have
+NOT been run for libaom. They all gate themselves exactly as the FlacWriter
+ones do; if one breaks, fix it in the script and record it in
+BUILD-PROVENANCE.txt.
 
 HOW TO REBUILD
 --------------------------------------------------------------------------------

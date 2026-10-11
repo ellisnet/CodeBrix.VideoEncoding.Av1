@@ -4,8 +4,11 @@
 #
 #   Written on Linux on 2026-10-10 as a copy of CodeBrix.Audio.FlacWriter's script of the same
 #   name (run successfully, unchanged, by Jeremy that day on his x64 Windows 11 machine), adapted to
-#   libaom. NOT YET RUN for libaom. If something breaks, fix it IN THE SCRIPT (or build-common.ps1)
-#   and record it in ..\BUILD-PROVENANCE.txt.
+#   libaom. FIRST RUN for libaom the same day, on the same machine (Visual Studio Professional 2026
+#   18.10.3, cl 19.51, cmake 4.4.3, Strawberry Perl 5.42.3, NASM 3.02): built, passed the whole
+#   gate including the 1871-check smoke test, and was adopted, with this script unchanged and no
+#   fix needed (see ..\BUILD-PROVENANCE.txt). If something breaks on another machine, fix it IN THE
+#   SCRIPT (or build-common.ps1) and record it there.
 #
 # USAGE (from any PowerShell prompt - the script sets up the compiler environment itself):
 #

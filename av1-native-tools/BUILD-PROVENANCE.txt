@@ -323,7 +323,75 @@ Windows (the two win-* entries)
                     clang-cl (-T ClangCL; see build-win-arm64.ps1).
   Scripts         : copies of CodeBrix.Audio.FlacWriter's Windows scripts (which ran
                     unchanged on Jeremy's x64 Windows 11 machine on 2026-10-10),
-                    adapted to libaom. NOT YET RUN for libaom.
+                    adapted to libaom.
+  Build host      : Jeremy's x64 desktop - Windows 11 Pro 10.0.26300 (AMD64),
+                    Visual Studio Professional 2026 18.10.3 [18.10.12224.181] at
+                    C:\Program Files\Microsoft Visual Studio\18\Professional,
+                    MSVC toolset 14.51.36231 (cl 19.51.36260), Windows SDK
+                    10.0.26100.0, cmake 4.4.3 (Kitware, on PATH; generator
+                    "Visual Studio 18 2026"), PowerShell 7.6.6. Scripts run as
+                    pwsh -NoProfile -ExecutionPolicy Bypass -File <script>.
+  Perl            : Strawberry Perl 5.42.3 (C:\Strawberry\perl\bin\perl.exe),
+                    installed by Jeremy for this build on 2026-10-10 (choco
+                    install strawberryperl, package 5.42.3.1). The build was
+                    launched from a shell older than the install, so
+                    C:\Strawberry\perl\bin was prepended to PATH for the build
+                    process only; libaom's find_package(Perl) found it there.
+  nasm            : NASM 3.02 (C:\Users\jerem\AppData\Local\bin\NASM\nasm.exe),
+                    already on the machine - NEWER than the vendored 2.16.03 the
+                    Linux and Android builds use. libaom's own checks on it
+                    (multipass -Ox, win64 object format) passed and the gate
+                    confirmed it was the assembler libaom recorded. win-arm64
+                    assembles nothing.
+  First run       : 2026-10-10 (02:53 UTC on the 11th), both RIDs, run
+                    concurrently. Both scripts ran UNCHANGED and NO fix was needed
+                    anywhere - neither in the scripts nor in the shim or smoke
+                    test. (The FlacWriter run's smoke-test fix - WIN32_LEAN_AND_MEAN
+                    and no Windows-macro identifiers - was already carried over.)
+  Build warnings  : x64 42 and ARM64 29 x MSBuild MSB8029 ("Intermediate
+                    directory ... under the Temporary directory", one per
+                    project, because -BuildRoot defaults to %TEMP%; every build is
+                    a clean build, so moot) + on each RID 2 x cl C4244 in libaom's
+                    own code (av1/encoder/pickrst.c lines 1195 and 1196: int64_t
+                    -> const double, 'initializing', possible loss of data;
+                    libaom compiles at its own /W3). Zero warnings in the shim
+                    and the smoke test; zero linker warnings.
+  Smoke output    : one "ok:" line of the error-path section wraps onto a second
+                    line ending in ") - libaom's own message for a bad option
+                    value ("Invalid value 'not-a-tuning'") ends in a newline and
+                    the smoke test quotes it verbatim. Cosmetic; the check passes.
+  CMake note      : the ARM64 configure prints one CMake policy warning, CMP0194
+                    ("MSVC is not an assembler for language ASM"), from libaom's
+                    enable_language(ASM) at aom/cmake/aom_configure.cmake:215
+                    under CMake 4.4. Harmless: libaom has no assembly for arm64
+                    and nothing was assembled. x64 enables ASM_NASM instead and
+                    prints no such warning.
+  libaom config   : x64 - AOM_ARCH_X86_64 with HAVE_MMX SSE SSE2 SSE3 SSSE3
+                    SSE4_1 SSE4_2 AVX AVX2 AVX512, runtime-dispatched via cpuid,
+                    the assembly files assembled by nasm (x86inc.asm included -
+                    hence the ISC notice in LICENSE-Aom.txt) - the same set as
+                    linux-x64.
+                    ARM64 - AOM_ARCH_ARM + AOM_ARCH_AARCH64 with HAVE_NEON
+                    HAVE_ARM_CRC32 HAVE_NEON_DOTPROD HAVE_NEON_I8MM; SVE and SVE2
+                    off (MSVC has no arm_neon_sve_bridge.h). More than the
+                    "portable C" one might expect from MSVC: libaom probes each
+                    flavour by compiling a stub with a GCC-style -march flag, cl
+                    only WARNS about an unknown option (D9002), so the probes
+                    pass, and MSVC's arm64 NEON header exposes the dot-product
+                    and I8MM intrinsics without any flag, so the kernels compile.
+                    CONFIG_RUNTIME_CPU_DETECT=1: libaom asks Windows at run time
+                    (IsProcessorFeaturePresent) before using them. Whether they
+                    RUN correctly on ARM64 is exactly what the pending device
+                    smoke test proves.
+                    Both: CONFIG_AV1_ENCODER=1 CONFIG_AV1_DECODER=0
+                    CONFIG_AV1_HIGHBITDEPTH=1 CONFIG_MULTITHREAD=1 (Win32 threads)
+                    CONFIG_PIC=1 CONFIG_LIBYUV=0 CONFIG_WEBM_IO=0; third_party
+                    compiled: exactly fastfeat + vector.
+  PE facts        : PE32+, linker 14.51, DllCharacteristics 0x0160
+                    (HIGH_ENTROPY_VA, DYNAMIC_BASE, NX_COMPAT), /GS on every
+                    object, not Authenticode-signed; the pdb is referenced by
+                    bare file name (CodeView RSDS record "codebrix_av1.pdb"), so
+                    no build-machine path is in the DLL.
   Gate            : PE machine (header + dumpbin), exact exports, dependents
                     KERNEL32.dll only (no VC runtime), third_party == fastfeat +
                     vector (from the generated .vcxproj files), nasm (x64), licence
@@ -331,17 +399,85 @@ Windows (the two win-* entries)
                     aom\), LoadLibrary smoke test by full path.
 
 ================================================================================
-win-x64                                       NOT YET BUILT - Jeremy builds on Windows
+win-x64                                                           BUILT + PASSED
 ================================================================================
-  cd av1-native-tools\windows ; .\build-win-x64.ps1
-  then replace this block from output\win-x64\BUILD-INFO.txt.
+Built            : 2026-10-11 02:53:53 UTC (129 s)
+Built by         : windows\build-win-x64.ps1 (route: native, x64 host)
+Build host       : the x64 desktop above (vcvarsall.bat x64)
+Visual Studio/cl : Visual Studio Professional 2026 18.10.3 / cl 19.51.36260 for x64
+cmake / perl     : cmake 4.4.3, generator "Visual Studio 18 2026" -A x64 /
+                   Strawberry Perl 5.42.3
+Assembler        : NASM 3.02 (C:\Users\jerem\AppData\Local\bin\NASM\nasm.exe)
+libaom config    : AOM_ARCH_X86_64 HAVE_MMX SSE SSE2 SSE3 SSSE3 SSE4_1 SSE4_2 AVX AVX2
+                   AVX512 (runtime-dispatched via cpuid), CONFIG_RUNTIME_CPU_DETECT=1
+                   CONFIG_MULTITHREAD=1 (Win32 threads) CONFIG_AV1_HIGHBITDEPTH=1
+File             : codebrix_av1.dll - PE32+ x64 (machine 0x8664), linker 14.51,
+                   OS/subsystem version 6.00, timestamp 0x6ACAFAB9
+Size             : 10560512 bytes
+SHA256           : 7a270a55524b89c4fd7a88a6047dde6da9860f0fd5227fd6bcec50394a18cc3d
+PDB              : codebrix_av1.pdb, 22777856 bytes -> unstripped/win-x64/codebrix_av1.pdb
+                   sha256 a9b96924b3e14640a4ee44bb7537158ab64c6c961ac932160e273c250b3f9ba8
+                   RSDS GUID {26F6AB0F-66D6-4983-9789-8EC381D293E0} age 1
+Exports          : exactly the 17 codebrix_av1_* functions
+Dependents       : KERNEL32.dll (static CRT; no Visual C++ Redistributable)
+Smoke test       : PASSED on the build host (1871 checks, 0 failed, SMOKE TEST
+                   PASSED, exit 0; output/win-x64/smoke-test.exe, sha256
+                   c52c34ede43014a4...5ce0d9b). Key frames land exactly as on
+                   Linux: 0 / 24 / 25 with a forced frame at 24 under GOOD usage
+                   (libaom's extra key frame after a forced one, see "Known
+                   libaom behaviours"), 0 / 15 under REALTIME, every frame under
+                   kf-max-dist 0 and ALL_INTRA, lock-step sets identical.
+Managed proof    : dotnet test (xUnit v3, 237 tests, 0 skipped; every round trip
+                   decoded by the published CodeBrix.VideoPlayback.Dav1d package,
+                   lossless bit-exact, lossy against the PSNR floor) passed on the
+                   build host against this exact file, loaded through the
+                   library's own resolver from runtimes/win-x64/native/,
+                   2026-10-11 02:57 UTC
 
 ================================================================================
-win-arm64                                     NOT YET BUILT - Jeremy builds on Windows
+win-arm64                       BUILT (cross) - STATIC GATE PASSED, SMOKE UNRUN
 ================================================================================
-  cd av1-native-tools\windows ; .\build-win-arm64.ps1 -AdoptCrossBuild   (x64 host)
-  then replace this block from output\win-arm64\BUILD-INFO.txt; finish the gate on
-  an ARM64 Windows device (Surface Pro X) as build-win-arm64.ps1's header says.
+Built            : 2026-10-11 02:53:56 UTC (108 s)
+Built by         : windows\build-win-arm64.ps1 -AdoptCrossBuild
+                   (route: CrossFromX64 - x64 host, vcvarsall.bat x64_arm64, -A ARM64,
+                   -DAOM_TARGET_CPU=arm64; MSVC, no clang-cl fallback was needed)
+Build host       : the x64 desktop above
+Visual Studio/cl : Visual Studio Professional 2026 18.10.3 / cl 19.51.36260 for ARM64
+                   (HostX64\ARM64 cross compiler)
+cmake / perl     : cmake 4.4.3, generator "Visual Studio 18 2026" -A ARM64 /
+                   Strawberry Perl 5.42.3
+Assembler        : none (libaom has no arm64 assembly)
+libaom config    : AOM_ARCH_ARM AOM_ARCH_AARCH64 HAVE_NEON HAVE_ARM_CRC32
+                   HAVE_NEON_DOTPROD HAVE_NEON_I8MM (SVE/SVE2 off), runtime-
+                   dispatched via IsProcessorFeaturePresent - see "libaom config"
+                   above; CONFIG_MULTITHREAD=1 (Win32 threads) CONFIG_AV1_HIGHBITDEPTH=1
+File             : codebrix_av1.dll - PE32+ ARM64 (machine 0xAA64), linker 14.51,
+                   OS/subsystem version 6.02, timestamp 0x6ACAFAAC
+Size             : 8182272 bytes
+SHA256           : 6455c92f17602365a5493e953aef98268d40ed37eede6cc715c6265b1b26583d
+PDB              : codebrix_av1.pdb, 19132416 bytes -> unstripped/win-arm64/codebrix_av1.pdb
+                   sha256 24e9b45bc450115933507b06e4c588cea730cc1b05cb2d651e7e8b7aa23d091d
+                   RSDS GUID {BA838BA1-AB26-4B03-8944-7878137367CD} age 1
+Exports          : exactly the 17 codebrix_av1_* functions
+Dependents       : KERNEL32.dll (static CRT; no Visual C++ Redistributable)
+Smoke test       : NOT RUN - an x64 Windows host cannot execute ARM64 code. The
+                   static checks (machine type both ways, exact exports,
+                   dependents, third_party, licence) all passed; adopted with
+                   -AdoptCrossBuild on purpose, because the binary is needed
+                   before the device is. Gate status in BUILD-INFO.txt: INCOMPLETE.
+To finish the gate: on an ARM64 Windows device (Jeremy's Surface Pro X), with
+                   output/win-arm64/codebrix_av1.dll (sha256 above) and
+                   output/win-arm64/smoke-test.exe (the ARM64 codebrix_av1_smoke
+                   from this run, sha256 01088bdcaed24107...9a8866b; it links no
+                   libaom and needs nothing else) copied into one folder, run
+                       smoke-test.exe <full path>\codebrix_av1.dll
+                   and expect "1871 checks, 0 failed" + "SMOKE TEST PASSED",
+                   exit 0. That run is also the first execution of libaom's
+                   MSVC-built NEON / dot-product / I8MM kernels on this RID. Then
+                   replace this line with the device, date and result. The
+                   managed test suite run on that device (dotnet test on an ARM64
+                   .NET 10 SDK) is the equivalent of the win-x64 "Managed proof"
+                   line.
 
 macOS (the two osx-* entries)
 --------------------------------------------------------------------------------

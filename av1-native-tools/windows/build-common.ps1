@@ -23,8 +23,12 @@
 #   arguments in Invoke-AomBuild (needs the "C++ Clang Compiler for Windows" component) and record
 #   it in ..\BUILD-PROVENANCE.txt.
 #
-#   NOT YET RUN for libaom. If something breaks on the Windows machine, fix it IN THE SCRIPT and
-#   record it in ..\BUILD-PROVENANCE.txt.
+#   FIRST RUN for libaom 2026-10-10 on Jeremy's x64 Windows 11 machine (Visual Studio Professional
+#   2026 18.10.3, cl 19.51, cmake 4.4.3, Strawberry Perl 5.42.3, NASM 3.02, PowerShell 7.6):
+#   win-x64 (full gate, 1871-check smoke test) and win-arm64 (cross, -AdoptCrossBuild, MSVC - the
+#   clang-cl fallback was NOT needed; smoke test unrun) both built and passed with THIS SCRIPT
+#   UNCHANGED and no fix anywhere. Recorded in ..\BUILD-PROVENANCE.txt. If something breaks on
+#   another machine, fix it IN THE SCRIPT and record it there too.
 #
 # Dot-source this from an architecture script; do not run it directly.
 #

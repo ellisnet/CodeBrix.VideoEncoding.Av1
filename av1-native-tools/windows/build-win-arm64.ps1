@@ -4,8 +4,14 @@
 #
 #   Written on Linux on 2026-10-10 as a copy of CodeBrix.Audio.FlacWriter's script of the same
 #   name (run successfully, unchanged, by Jeremy that day on his x64 Windows 11 machine), adapted to
-#   libaom. NOT YET RUN for libaom. If something breaks, fix it IN THE SCRIPT (or build-common.ps1)
-#   and record it in ..\BUILD-PROVENANCE.txt.
+#   libaom. FIRST RUN for libaom the same day, CrossFromX64 route, on the same machine (Visual
+#   Studio Professional 2026 18.10.3, cl 19.51 for ARM64, cmake 4.4.3, Strawberry Perl 5.42.3) with
+#   -AdoptCrossBuild: MSVC built libaom's ARM64 code on the first try (NEON, CRC32, dot-product and
+#   I8MM kernels, runtime-dispatched; the clang-cl fallback below was NOT needed), every static
+#   check passed, adopted, with this script unchanged; the smoke test is UNRUN until it is executed
+#   on an ARM64 Windows device (see below and ..\BUILD-PROVENANCE.txt). The Native route has never
+#   run. If something breaks, fix it IN THE SCRIPT (or build-common.ps1) and record it in
+#   ..\BUILD-PROVENANCE.txt.
 #
 # USAGE (from any PowerShell prompt - the script sets up the compiler environment itself):
 #
