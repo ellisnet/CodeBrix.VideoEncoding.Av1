@@ -10,7 +10,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -21,7 +21,7 @@
 
   <ItemGroup>
     <!-- The same Core pin as the library csproj; raise both together. -->
-    <PackageReference Include="CodeBrix.VideoProcessing.Core.MitLicenseForever" Version="1.0.284.20" />
+    <PackageReference Include="CodeBrix.VideoProcessing.Core.MitLicenseForever" Version="1.0.290.1023" />
     <!-- The independent AV1 DECODER the round-trip tests decode every packet with (test project only). -->
     <PackageReference Include="CodeBrix.VideoPlayback.Dav1d.BsdLicenseForever" Version="1.0.271.1206" />
   </ItemGroup>

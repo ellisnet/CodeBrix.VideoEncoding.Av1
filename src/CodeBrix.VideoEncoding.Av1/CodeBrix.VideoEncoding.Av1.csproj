@@ -76,7 +76,7 @@
 
   <ItemGroup>
     <!-- The encoder contract this package implements. The same Core pin as the test project; raise both together. -->
-    <PackageReference Include="CodeBrix.VideoProcessing.Core.MitLicenseForever" Version="1.0.284.20" />
+    <PackageReference Include="CodeBrix.VideoProcessing.Core.MitLicenseForever" Version="1.0.290.1023" />
   </ItemGroup>
 
   <ItemGroup>
